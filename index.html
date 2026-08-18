@@ -88,7 +88,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 
 <script>
 const SUPABASE_URL="https://lkardvaarttsgrfptnrq.supabase.co";
-const SUPABASE_ANON_KEY= "sb_publishable_KdsPVEPXHjMZ3lku_YqDXQ_36lACkXn";
+const SUPABASE_ANON_KEY="sb_publishable_KdsPVEPXHjMZ3lku_YqDXQ_36lACkXn";
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const EXAM=new Date("2027-05-22T00:00:00+05:30");
 let user=null, state={weekStart:"",completed:0}, tasks=[];
@@ -116,7 +116,7 @@ async function loadTasks(){
  const {data,error}=await db.from("tasks").select("*").eq("user_id",user.id).eq("task_date",todayKey()).order("created_at");
  if(error)throw error;
  tasks=data||[];
- await renderTasks();
+ await displayTasks();
 }
 
 async function addTask(){
@@ -128,7 +128,7 @@ async function addTask(){
  await loadTasks();
 }
 
-async function renderTasks(){
+async function displayTasks(){
  const list=document.getElementById("taskList");
  list.innerHTML="";
  if(!tasks.length){
