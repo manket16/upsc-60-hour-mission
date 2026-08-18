@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UPSC 60-Hour Mission</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#fff7fa;--card:#fff;--card2:#fff0f5;--text:#352b30;--muted:#806d75;--pink:#d96b91;--pink-dark:#b84d75;--border:#efd3de;--green:#5b9b79;--shadow:0 8px 28px rgba(150,80,110,.08)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1080px;margin:auto;padding:22px}.hidden{display:none!important}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:var(--shadow);margin-top:16px}
+.auth{max-width:480px;margin:8vh auto;padding:28px}.auth h1{color:var(--pink-dark)}
+input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);border-radius:10px;padding:11px;color:var(--text);font:inherit}textarea{min-height:75px;resize:vertical}
+.btn{background:white;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 16px;cursor:pointer;font-size:15px}.btn:hover{border-color:var(--pink)}.primary{background:var(--pink);border-color:var(--pink);color:white;font-weight:700}
+.hero{position:relative;min-height:360px;border-radius:24px;overflow:hidden;background:#f3dbe4;display:flex;align-items:end}.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 15%,rgba(47,28,38,.78))}.hero-content{position:relative;z-index:2;padding:32px;color:white;max-width:780px}.eyebrow{font-size:13px;letter-spacing:.14em;font-weight:700}.hero h1{font-size:43px;line-height:1.05;margin:9px 0}.hero p{font-size:17px;line-height:1.5;margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.metric{font-size:31px;font-weight:800;color:var(--pink-dark)}.muted{color:var(--muted);font-size:14px}
+.countgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.countbox{background:var(--card2);border-radius:13px;padding:14px;text-align:center}.countbox strong{display:block;font-size:28px;color:var(--pink-dark)}
+.timer{font-size:76px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;color:var(--pink-dark);line-height:1.1}.mode{text-align:center;font-weight:800;color:var(--pink-dark);letter-spacing:.12em;margin:8px}.buttons{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+.progress{height:12px;background:#f3e5ea;border-radius:99px;overflow:hidden}.fill{height:100%;width:0;background:var(--pink);transition:.2s}
+.sessions{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin-top:14px}.session{aspect-ratio:1;border:1px solid var(--border);border-radius:9px;background:#fffafb;color:var(--muted);cursor:pointer;font-weight:650}.session.done{background:var(--green);color:white;border-color:var(--green)}
+.quote{font-size:18px;line-height:1.55;font-weight:650}.why{display:grid;grid-template-columns:1fr 1fr;gap:14px}.whybox{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:19px;line-height:1.55}
+.task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .task-title{text-decoration:line-through;color:var(--muted)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;gap:8px;align-items:center}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.audio-row{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);padding:14px;border-radius:12px}.audio-row>div{flex:1}input[type=range]{accent-color:var(--pink);width:100%}
+.break-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.break-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:17px;min-height:145px}.break-card a{color:var(--pink-dark);text-decoration:none}.small{text-align:center;color:var(--muted);font-size:13px;margin-top:10px}.status{margin-top:10px;color:var(--green);font-weight:650;min-height:20px}
+#accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+@media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
+</style>
+</head>
+<body>
+
+<section id="authScreen" class="panel auth">
+  <div class="muted">UPSC 60-HOUR MISSION</div>
+  <h1>Sign in to sync your progress</h1>
+  <p class="muted">Your tasks and weekly sessions will be stored in your free Supabase database so they can follow you across devices.</p>
+  <input id="email" type="email" placeholder="Email address">
+  <br><br>
+  <input id="password" type="password" placeholder="Password">
+  <div class="buttons" style="margin-top:12px">
+    <button class="btn primary" id="signIn">Sign in</button>
+    <button class="btn" id="signUp">Create account</button>
+  </div>
+  <div id="authMsg" class="status"></div>
+</section>
+
+<main id="app" class="hidden">
+<div id="accountBar" class="panel" style="margin-top:0"><span class="muted" id="accountEmail"></span><button class="btn" id="signOut">Sign out</button></div>
+
+<section class="hero">
+  <img src="https://images.timesnowhindi.com/photo/msid-153132806/153132806.jpg?thumbsize=144240" alt="LBSNAA Mussoorie campus" onerror="this.style.display='none'">
+  <div class="hero-content"><div class="eyebrow">UPSC CSE • 60 HOURS / WEEK</div><h1>Work until LBSNAA is no longer a dream.</h1><p>50 minutes of genuine focus. 10 minutes to reset. One completed focus session becomes one hour in your weekly mission.</p></div>
+</section>
+
+<section class="grid">
+  <div class="panel"><div class="muted">WEEKLY TARGET</div><div class="metric">60 HOURS</div><div class="muted">60 completed focus sessions</div></div>
+  <div class="panel"><div class="muted">COMPLETED</div><div class="metric" id="doneMetric">0 / 60</div><div class="muted" id="minuteMetric">0 focused minutes</div></div>
+  <div class="panel"><div class="muted">DAYS UNTIL UPSC</div><div class="metric" id="daysMetric">—</div><div class="muted">22 May 2027</div></div>
+</section>
+
+<section class="panel"><div class="muted">EXAM COUNTDOWN</div><h2>22 May 2027</h2><div class="countgrid">
+<div class="countbox"><strong id="days">—</strong><span class="muted">days</span></div><div class="countbox"><strong id="hours">—</strong><span class="muted">hours</span></div><div class="countbox"><strong id="mins">—</strong><span class="muted">minutes</span></div><div class="countbox"><strong id="secs">—</strong><span class="muted">seconds</span></div>
+</div></section>
+
+<section class="panel"><div class="muted">50–10 POMODORO</div><h2>Focus now. Break later.</h2><div class="mode" id="mode">FOCUS</div><div class="timer" id="timer">50:00</div>
+<div class="buttons"><button class="btn primary" id="start">Start</button><button class="btn" id="pause">Pause</button><button class="btn" id="reset">Reset</button></div>
+<div class="small">50:00 completed = +1 hour. Then the 10-minute break begins.</div></section>
+
+<section class="panel"><div style="display:flex;justify-content:space-between;align-items:end;gap:10px"><div><div class="muted">60-HOUR TRACKER</div><h2>Weekly mission</h2></div><strong id="percent">0%</strong></div>
+<div class="progress"><div class="fill" id="fill"></div></div><div style="display:flex;justify-content:space-between;margin-top:8px" class="muted"><span id="progress">0 / 60 hours</span><span>1 session = 1 hour</span></div>
+<div class="sessions" id="sessions"></div><div class="buttons" style="margin-top:14px"><button class="btn" id="resetWeek">Reset this week</button></div></section>
+
+<section class="panel"><div class="muted">TODAY'S TASKS</div><h2>What must get done today?</h2><div style="display:grid;gap:10px">
+<input id="taskInput" type="text" placeholder="Main task — e.g. Finish Fundamental Rights">
+<textarea id="subtaskInput" placeholder="Optional subtasks — one per line&#10;Read Articles 12–18&#10;Make Anki cards&#10;Solve PYQs"></textarea>
+<button class="btn primary" id="addTask">+ Add today's task</button></div><div class="task-list" id="taskList"></div></section>
+
+<section class="panel"><div class="muted">TODAY'S LINE</div><div class="quote" id="quote"></div></section>
+<section class="panel"><div class="muted">WHY WORK HARD?</div><div class="quote">Time gone will never come back. Every hour you waste today becomes an hour you cannot recover before the exam. You do not need a perfect day. You need enough honest days stacked together that the result becomes difficult to deny.</div></section>
+<section class="why"><div class="whybox"><strong>For your family</strong><br>Work hard because your future success can give your family more security, more choices and more moments of happiness. The struggle of preparation is temporary; the life you are building can last for decades.</div><div class="whybox"><strong>For your future self</strong><br>The person you become after this exam will live with the consequences of what you repeatedly choose today. Give that future version of yourself a reason to be grateful that you kept going.</div></section>
+
+<section class="panel"><div class="muted">IN-SITE STUDY MUSIC</div><h2>Focus music — no Spotify required</h2><div class="audio-row"><button class="btn primary" id="audioToggle">▶ Play</button><div><strong>Deep Focus Ambience</strong><div class="muted" id="audioStatus">Soft ambient sound generated in this site</div></div></div><label class="muted">Volume<input id="volume" type="range" min="0" max="0.08" step="0.001" value="0.018"></label></section>
+
+<section class="panel"><div class="muted">10-MINUTE BREAK</div><h2>Choose one. Reset. Come back.</h2><div class="break-grid">
+<div class="break-card"><strong>🎧 Listen to Spotify music</strong><p class="muted">Listen to one song or a short playlist.</p><a class="btn" style="display:inline-block" href="https://open.spotify.com/" target="_blank" rel="noopener">Open Spotify ↗</a></div>
+<div class="break-card"><strong>❤️ Talk to Mom</strong><p class="muted">Have a short conversation and return refreshed.</p><button class="btn breakDone">Done</button></div>
+<div class="break-card"><strong>🚶 Stretch & Walk</strong><p class="muted">Stand up, stretch, walk around and reset your body.</p><button class="btn breakDone">Done</button></div>
+</div><div class="status" id="breakStatus"></div></section>
+</main>
+
+<script>
+const SUPABASE_URL="https://lkardvaarttsgrfptnrq.supabase.co";
+const SUPABASE_ANON_KEY= "sb_publishable_KdsPVEPXHjMZ3lku_YqDXQ_36lACkXn";
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const EXAM=new Date("2027-05-22T00:00:00+05:30");
+let user=null, state={weekStart:"",completed:0}, tasks=[];
+const mondayKey=(d=new Date())=>{const x=new Date(d),day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x.toISOString().slice(0,10)};
+const todayKey=()=>new Date().toISOString().slice(0,10);
+
+function msg(t){document.getElementById("authMsg").textContent=t}
+async function signUp(){const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;if(!email||password.length<6)return msg("Enter an email and a password of at least 6 characters.");const {error}=await db.auth.signUp({email,password});msg(error?error.message:"Account created. Check your email if confirmation is enabled, then sign in.")}
+async function signIn(){const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;const {error}=await db.auth.signInWithPassword({email,password});if(error)msg(error.message)}
+document.getElementById("signUp").onclick=signUp;document.getElementById("signIn").onclick=signIn;
+document.getElementById("signOut").onclick=()=>db.auth.signOut();
+
+async function ensureWeek(){
+ const week=mondayKey();
+ const {data,error}=await db.from("weekly_progress").select("*").eq("user_id",user.id).eq("week_start",week).maybeSingle();
+ if(error)throw error;
+ if(data)state=data;
+ else{const {data:n,error:e}=await db.from("weekly_progress").insert({user_id:user.id,week_start:week,completed:0}).select().single();if(e)throw e;state=n}
+}
+async function saveProgress(){
+ const {error}=await db.from("weekly_progress").upsert({user_id:user.id,week_start:state.weekStart,completed:state.completed},{onConflict:"user_id,week_start"});
+ if(error)console.error(error);
+}
+async function loadTasks(){
+ const {data,error}=await db.from("tasks").select("*").eq("user_id",user.id).eq("task_date",todayKey()).order("created_at");
+ if(error)throw error;tasks=data||[];renderTasks();
+}
+async function addTask(){
+ const title=document.getElementById("taskInput").value.trim();if(!title)return;
+ const lines=document.getElementById("subtaskInput").value.split("\n").map(x=>x.trim()).filter(Boolean);
+ const {data:t,error}=await db.from("tasks").insert({user_id:user.id,task_date:todayKey(),title,done:false}).select().single();
+ if(error)return alert(error.message);
+ for(const s of lines){const {error:e}=await db.from("subtasks").insert({task_id:t.id,user_id:user.id,title:s,done:false});if(e)console.error(e)}
+ document.getElementById("taskInput").value="";document.getElementById("subtaskInput").value="";await loadTasks();
+}
+async function renderTasks(){
+ const list=document.getElementById("taskList");list.innerHTML="";
+ if(!tasks.length){list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';return}
+ for(const t of tasks){
+  const {data:subs}=await db.from("subtasks").select("*").eq("task_id",t.id).order("created_at");
+  const card=document.createElement("div");card.className="task"+(t.done?" done":"");
+  const head=document.createElement("div");head.className="task-head";
+  const cb=document.createElement("input");cb.type="checkbox";cb.checked=t.done;cb.onchange=async()=>{await db.from("tasks").update({done:cb.checked}).eq("id",t.id).eq("user_id",user.id);await loadTasks()};
+  const title=document.createElement("div");title.className="task-title";title.textContent=t.title;head.append(cb,title);card.append(head);
+  if(subs?.length){const wrap=document.createElement("div");wrap.className="subtasks";for(const s of subs){const row=document.createElement("label");row.className="subtask";const sc=document.createElement("input");sc.type="checkbox";sc.checked=s.done;sc.onchange=async()=>{await db.from("subtasks").update({done:sc.checked}).eq("id",s.id).eq("user_id",user.id);await loadTasks()};const st=document.createElement("span");st.textContent=s.title;if(s.done)st.style.textDecoration="line-through";row.append(sc,st);wrap.append(row)}card.append(wrap)}
+  const actions=document.createElement("div");actions.className="task-actions";
+  const add=document.createElement("button");add.className="btn";add.textContent="+ Add subtask";add.onclick=async()=>{const v=prompt("Subtask:");if(v?.trim()){await db.from("subtasks").insert({task_id:t.id,user_id:user.id,title:v.trim(),done:false});await loadTasks()}};
+  const del=document.createElement("button");del.className="btn";del.textContent="Delete";del.onclick=async()=>{if(confirm("Delete this task?")){await db.from("tasks").delete().eq("id",t.id).eq("user_id",user.id);await loadTasks()}};
+  actions.append(add,del);card.append(actions);list.append(card);
+ }
+}
+document.getElementById("addTask").onclick=addTask;
+
+function render(){
+ const c=state.completed,p=Math.round(c/60*100);document.getElementById("doneMetric").textContent=`${c} / 60`;document.getElementById("minuteMetric").textContent=`${c*50} focused minutes`;document.getElementById("progress").textContent=`${c} / 60 hours`;document.getElementById("percent").textContent=p+"%";document.getElementById("fill").style.width=p+"%";
+ const box=document.getElementById("sessions");box.innerHTML="";
+ for(let i=0;i<60;i++){const b=document.createElement("button");b.className="session"+(i<c?" done":"");b.textContent=i<c?"✓":i+1;b.onclick=async()=>{if(i<c){state.completed--;await saveProgress();render()}};box.append(b)}
+}
+document.getElementById("resetWeek").onclick=async()=>{if(confirm("Reset this week's progress?")){state.completed=0;await saveProgress();render()}};
+
+function countdown(){let d=Math.max(0,EXAM-Date.now()),a=Math.floor(d/86400000);d%=86400000;let h=Math.floor(d/3600000);d%=3600000;let m=Math.floor(d/60000);d%=60000;let s=Math.floor(d/1000);document.getElementById("days").textContent=a;document.getElementById("hours").textContent=h;document.getElementById("mins").textContent=m;document.getElementById("secs").textContent=s;document.getElementById("daysMetric").textContent=a}
+
+let remaining=3000,running=false,breakMode=false,timerId=null;
+function timerRender(){document.getElementById("timer").textContent=String(Math.floor(remaining/60)).padStart(2,"0")+":"+String(remaining%60).padStart(2,"0")}
+async function switchMode(){if(!breakMode){if(state.completed<60){state.completed++;await saveProgress();render()}breakMode=true;remaining=600;document.getElementById("mode").textContent="BREAK"}else{breakMode=false;remaining=3000;document.getElementById("mode").textContent="FOCUS"}timerRender()}
+async function tick(){if(remaining>0){remaining--;timerRender()}else{await switchMode()}}
+document.getElementById("start").onclick=()=>{if(!running){running=true;timerId=setInterval(tick,1000)}};document.getElementById("pause").onclick=()=>{running=false;clearInterval(timerId);timerId=null};document.getElementById("reset").onclick=()=>{running=false;clearInterval(timerId);timerId=null;breakMode=false;remaining=3000;document.getElementById("mode").textContent="FOCUS";timerRender()};
+
+const QUOTES=["Don't wait to feel motivated. Start the next 50 minutes.","The exam date will not move because you postponed today's work.","Six months of honest sessions can change the direction of your life.","Potential means very little without repeated execution.","Your future self cannot redo today's hours.","Don't chase a perfect study day. Build a reliable one.","One focused session is small. Hundreds of focused sessions are preparation.","The work you avoid today will still be waiting tomorrow.","Your job today is to complete the next session.","Discipline is doing the session even when the excitement is gone."];
+document.getElementById("quote").textContent=QUOTES[Math.floor((Date.now()-new Date(new Date().getFullYear(),0,1))/86400000)%QUOTES.length];
+
+document.querySelectorAll(".breakDone").forEach(b=>b.onclick=()=>document.getElementById("breakStatus").textContent="Break completed. Return to your next 50-minute focus session.");
+
+let audioCtx=null,osc1=null,osc2=null,gain=null;
+document.getElementById("audioToggle").onclick=()=>{if(!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)();osc1=audioCtx.createOscillator();osc2=audioCtx.createOscillator();gain=audioCtx.createGain();osc1.frequency.value=174;osc2.frequency.value=261.63;gain.gain.value=.018;osc1.connect(gain);osc2.connect(gain);gain.connect(audioCtx.destination);osc1.start();osc2.start();document.getElementById("audioToggle").textContent="■ Stop"}else if(audioCtx.state==="running"){audioCtx.suspend();document.getElementById("audioToggle").textContent="▶ Play"}else{audioCtx.resume();document.getElementById("audioToggle").textContent="■ Stop"}};
+document.getElementById("volume").oninput=e=>{if(gain)gain.gain.value=+e.target.value};
+
+async function startApp(){
+ const {data:{session}}=await db.auth.getSession();
+ if(!session){document.getElementById("authScreen").classList.remove("hidden");document.getElementById("app").classList.add("hidden");return}
+ user=session.user;document.getElementById("accountEmail").textContent=user.email||"Signed in";
+ try{await ensureWeek();await loadTasks();render();document.getElementById("authScreen").classList.add("hidden");document.getElementById("app").classList.remove("hidden")}catch(e){document.getElementById("authMsg").textContent=e.message}
+}
+db.auth.onAuthStateChange(()=>startApp());
+startApp();timerRender();countdown();setInterval(countdown,1000);
+</script>
+</body>
+</html>
