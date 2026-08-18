@@ -71,7 +71,6 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 
 <section class="panel"><div class="muted">TODAY'S TASKS</div><h2>What must get done today?</h2><div style="display:grid;gap:10px">
 <input id="taskInput" type="text" placeholder="Main task — e.g. Finish Fundamental Rights">
-<textarea id="subtaskInput" placeholder="Optional subtasks — one per line&#10;Read Articles 12–18&#10;Make Anki cards&#10;Solve PYQs"></textarea>
 <button class="btn primary" id="addTask">+ Add today's task</button></div><div class="task-list" id="taskList"></div></section>
 
 <section class="panel"><div class="muted">TODAY'S LINE</div><div class="quote" id="quote"></div></section>
@@ -119,27 +118,9 @@ async function loadTasks(){
 }
 async function addTask(){
  const title=document.getElementById("taskInput").value.trim();if(!title)return;
- const lines=document.getElementById("subtaskInput").value.split("\n").map(x=>x.trim()).filter(Boolean);
  const {data:t,error}=await db.from("tasks").insert({user_id:user.id,task_date:todayKey(),title,done:false}).select().single();
  if(error)return alert(error.message);
- for(const s of lines){const {error:e}=await db.from("subtasks").insert({task_id:t.id,user_id:user.id,title:s,done:false});if(e)console.error(e)}
- document.getElementById("taskInput").value="";document.getElementById("subtaskInput").value="";await loadTasks();
-}
-async function renderTasks(){
- const list=document.getElementById("taskList");list.innerHTML="";
- if(!tasks.length){list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';return}
- for(const t of tasks){
-  const {data:subs}=await db.from("subtasks").select("*").eq("task_id",t.id).order("created_at");
-  const card=document.createElement("div");card.className="task"+(t.done?" done":"");
-  const head=document.createElement("div");head.className="task-head";
-  const cb=document.createElement("input");cb.type="checkbox";cb.checked=t.done;cb.onchange=async()=>{await db.from("tasks").update({done:cb.checked}).eq("id",t.id).eq("user_id",user.id);await loadTasks()};
-  const title=document.createElement("div");title.className="task-title";title.textContent=t.title;head.append(cb,title);card.append(head);
-  if(subs?.length){const wrap=document.createElement("div");wrap.className="subtasks";for(const s of subs){const row=document.createElement("label");row.className="subtask";const sc=document.createElement("input");sc.type="checkbox";sc.checked=s.done;sc.onchange=async()=>{await db.from("subtasks").update({done:sc.checked}).eq("id",s.id).eq("user_id",user.id);await loadTasks()};const st=document.createElement("span");st.textContent=s.title;if(s.done)st.style.textDecoration="line-through";row.append(sc,st);wrap.append(row)}card.append(wrap)}
-  const actions=document.createElement("div");actions.className="task-actions";
-  const add=document.createElement("button");add.className="btn";add.textContent="+ Add subtask";add.onclick=async()=>{const v=prompt("Subtask:");if(v?.trim()){await db.from("subtasks").insert({task_id:t.id,user_id:user.id,title:v.trim(),done:false});await loadTasks()}};
-  const del=document.createElement("button");del.className="btn";del.textContent="Delete";del.onclick=async()=>{if(confirm("Delete this task?")){await db.from("tasks").delete().eq("id",t.id).eq("user_id",user.id);await loadTasks()}};
-  actions.append(add,del);card.append(actions);list.append(card);
- }
+ document.getElementById("taskInput").value="";await loadTasks();
 }
 document.getElementById("addTask").onclick=addTask;
 
