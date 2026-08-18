@@ -284,15 +284,15 @@ function pianoNote(freq,when,duration=2.7,level=.028){
 }
 function playPiano(){
  const notes=[261.63,329.63,392,329.63,293.66,349.23,440,349.23];let i=0;
- const go=()=>{if(!isPlaying)return;let t=audioCtx.currentTime+.05;pianoNote(notes[i%8],t);pianoNote(notes[(i+3)%8]/2,t,3.2,.012);i++;};
+ const go=()=>{if(!isPlaying)return;let t=audioCtx.currentTime+.05;pianoNote(notes[i%8],t,2.7,.055);pianoNote(notes[(i+3)%8]/2,t,3.2,.025);i++;};
  go();soundTimer=setInterval(go,2600);
 }
 function playSound(){
  ensureAudio();stopSound();isPlaying=true;
  if(currentSound==="rain"){addNoise("lowpass",.70,3000);addNoise("highpass",.035,140);}
- else if(currentSound==="brown"){addNoise("lowpass",.72,450);}
- else if(currentSound==="forest"){addNoise("lowpass",.18,1200);addNoise("highpass",.025,220);}
- else if(currentSound==="cafe"){addNoise("bandpass",.20,900);addNoise("lowpass",.10,250);}
+ else if(currentSound==="brown"){addNoise("lowpass",.90,450);}
+ else if(currentSound==="forest"){addNoise("lowpass",.35,1200);addNoise("highpass",.055,220);}
+ else if(currentSound==="cafe"){addNoise("bandpass",.38,900);addNoise("lowpass",.18,250);}
  else if(currentSound==="piano"){playPiano();}
  document.getElementById("audioToggle").textContent="■ Stop";
  document.getElementById("audioStatus").textContent=currentSound==="silence"?"Silence selected":"Playing "+soundNames[currentSound];
@@ -301,9 +301,19 @@ function stopPlayback(){isPlaying=false;stopSound();document.getElementById("aud
 document.getElementById("audioToggle").onclick=()=>isPlaying?stopPlayback():playSound();
 document.getElementById("volume").oninput=e=>{if(master)master.gain.value=+e.target.value};
 document.querySelectorAll(".sound-card").forEach(card=>card.onclick=()=>{
- document.querySelectorAll(".sound-card").forEach(c=>c.classList.remove("active"));card.classList.add("active");
- currentSound=card.dataset.sound;document.getElementById("soundName").textContent=soundNames[currentSound];
- if(isPlaying){if(currentSound==="silence")stopPlayback();else playSound();}
+ document.querySelectorAll(".sound-card").forEach(c=>c.classList.remove("active"));
+ card.classList.add("active");
+ currentSound=card.dataset.sound;
+ document.getElementById("soundName").textContent=soundNames[currentSound];
+
+ // Selecting a sound also starts it, so the user does not need to press Play twice.
+ if(currentSound==="silence"){
+   stopPlayback();
+   document.getElementById("soundName").textContent="Silence";
+   document.getElementById("audioStatus").textContent="Silence selected";
+ }else{
+   playSound();
+ }
 });
 
 async function startApp(){
