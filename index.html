@@ -24,7 +24,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 .audio-row{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);padding:14px;border-radius:12px}.audio-row>div{flex:1}input[type=range]{accent-color:var(--pink);width:100%}
 .break-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.break-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:17px;min-height:145px}.break-card a{color:var(--pink-dark);text-decoration:none}.small{text-align:center;color:var(--muted);font-size:13px;margin-top:10px}.status{margin-top:10px;color:var(--green);font-weight:650;min-height:20px}
 #accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
-@media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
+ .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
 </head>
 <body>
@@ -77,7 +77,23 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 <section class="panel"><div class="muted">WHY WORK HARD?</div><div class="quote">Time gone will never come back. Every hour you waste today becomes an hour you cannot recover before the exam. You do not need a perfect day. You need enough honest days stacked together that the result becomes difficult to deny.</div></section>
 <section class="why"><div class="whybox"><strong>For your family</strong><br>Work hard because your future success can give your family more security, more choices and more moments of happiness. The struggle of preparation is temporary; the life you are building can last for decades.</div><div class="whybox"><strong>For your future self</strong><br>The person you become after this exam will live with the consequences of what you repeatedly choose today. Give that future version of yourself a reason to be grateful that you kept going.</div></section>
 
-<section class="panel"><div class="muted">IN-SITE STUDY MUSIC</div><h2>Focus music — no Spotify required</h2><div class="audio-row"><button class="btn primary" id="audioToggle">▶ Play</button><div><strong>Deep Focus Ambience</strong><div class="muted" id="audioStatus">Soft ambient sound generated in this site</div></div></div><label class="muted">Volume<input id="volume" type="range" min="0" max="0.08" step="0.001" value="0.018"></label></section>
+<section class="panel audio">
+  <div><div class="muted">IN-SITE STUDY SOUND LIBRARY</div><h2>Choose your focus environment</h2></div>
+  <div class="sound-grid">
+    <button class="sound-card active" data-sound="rain">🌧️<strong>Rain</strong><span>Soft rainfall</span></button>
+    <button class="sound-card" data-sound="brown">〰️<strong>Brown Noise</strong><span>Deep steady noise</span></button>
+    <button class="sound-card" data-sound="piano">🎹<strong>Calm Piano</strong><span>Slow piano tones</span></button>
+    <button class="sound-card" data-sound="forest">🌲<strong>Forest</strong><span>Wind and nature</span></button>
+    <button class="sound-card" data-sound="cafe">☕<strong>Café</strong><span>Low room ambience</span></button>
+    <button class="sound-card" data-sound="silence">🔇<strong>Silence</strong><span>No background sound</span></button>
+  </div>
+  <div class="audio-row">
+    <button class="btn primary" id="audioToggle">▶ Play</button>
+    <div><strong id="soundName">Rain</strong><div class="muted" id="audioStatus">Ready to play</div></div>
+  </div>
+  <label class="muted">Volume<input id="volume" type="range" min="0" max="0.08" step="0.001" value="0.018"></label>
+  <div class="small">These sounds are generated directly in the browser. Spotify is only for your break.</div>
+</section>
 
 <section class="panel"><div class="muted">10-MINUTE BREAK</div><h2>Choose one. Reset. Come back.</h2><div class="break-grid">
 <div class="break-card"><strong>🎧 Listen to Spotify music</strong><p class="muted">Listen to one song or a short playlist.</p><a class="btn" style="display:inline-block" href="https://open.spotify.com/" target="_blank" rel="noopener">Open Spotify ↗</a></div>
@@ -241,9 +257,54 @@ document.getElementById("quote").textContent=QUOTES[Math.floor((Date.now()-new D
 
 document.querySelectorAll(".breakDone").forEach(b=>b.onclick=()=>document.getElementById("breakStatus").textContent="Break completed. Return to your next 50-minute focus session.");
 
-let audioCtx=null,osc1=null,osc2=null,gain=null;
-document.getElementById("audioToggle").onclick=()=>{if(!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)();osc1=audioCtx.createOscillator();osc2=audioCtx.createOscillator();gain=audioCtx.createGain();osc1.frequency.value=174;osc2.frequency.value=261.63;gain.gain.value=.018;osc1.connect(gain);osc2.connect(gain);gain.connect(audioCtx.destination);osc1.start();osc2.start();document.getElementById("audioToggle").textContent="■ Stop"}else if(audioCtx.state==="running"){audioCtx.suspend();document.getElementById("audioToggle").textContent="▶ Play"}else{audioCtx.resume();document.getElementById("audioToggle").textContent="■ Stop"}};
-document.getElementById("volume").oninput=e=>{if(gain)gain.gain.value=+e.target.value};
+let audioCtx=null, master=null, soundNodes=[], soundTimer=null, currentSound="rain", isPlaying=false;
+const soundNames={rain:"Rain",brown:"Brown Noise",piano:"Calm Piano",forest:"Forest",cafe:"Café",silence:"Silence"};
+
+function ensureAudio(){
+ if(!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)();master=audioCtx.createGain();master.gain.value=+document.getElementById("volume").value;master.connect(audioCtx.destination);}
+ if(audioCtx.state==="suspended")audioCtx.resume();
+}
+function stopSound(){
+ soundNodes.forEach(n=>{try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}});
+ soundNodes=[];if(soundTimer){clearInterval(soundTimer);soundTimer=null;}
+}
+function noiseBuffer(seconds=2){
+ const b=audioCtx.createBuffer(1,audioCtx.sampleRate*seconds,audioCtx.sampleRate),d=b.getChannelData(0);
+ for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b;
+}
+function addNoise(filterType,level,freq){
+ const src=audioCtx.createBufferSource();src.buffer=noiseBuffer();src.loop=true;
+ const f=audioCtx.createBiquadFilter();f.type=filterType;f.frequency.value=freq;
+ const g=audioCtx.createGain();g.gain.value=level;src.connect(f);f.connect(g);g.connect(master);src.start();soundNodes.push(src);
+}
+function pianoNote(freq,when,duration=2.7,level=.028){
+ const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="sine";o.frequency.value=freq;
+ g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(level,when+.04);g.gain.exponentialRampToValueAtTime(.0001,when+duration);
+ o.connect(g);g.connect(master);o.start(when);o.stop(when+duration+.1);soundNodes.push(o);
+}
+function playPiano(){
+ const notes=[261.63,329.63,392,329.63,293.66,349.23,440,349.23];let i=0;
+ const go=()=>{if(!isPlaying)return;let t=audioCtx.currentTime+.05;pianoNote(notes[i%8],t);pianoNote(notes[(i+3)%8]/2,t,3.2,.012);i++;};
+ go();soundTimer=setInterval(go,2600);
+}
+function playSound(){
+ ensureAudio();stopSound();isPlaying=true;
+ if(currentSound==="rain"){addNoise("lowpass",.70,3000);addNoise("highpass",.035,140);}
+ else if(currentSound==="brown"){addNoise("lowpass",.72,450);}
+ else if(currentSound==="forest"){addNoise("lowpass",.18,1200);addNoise("highpass",.025,220);}
+ else if(currentSound==="cafe"){addNoise("bandpass",.20,900);addNoise("lowpass",.10,250);}
+ else if(currentSound==="piano"){playPiano();}
+ document.getElementById("audioToggle").textContent="■ Stop";
+ document.getElementById("audioStatus").textContent=currentSound==="silence"?"Silence selected":"Playing "+soundNames[currentSound];
+}
+function stopPlayback(){isPlaying=false;stopSound();document.getElementById("audioToggle").textContent="▶ Play";document.getElementById("audioStatus").textContent="Paused";}
+document.getElementById("audioToggle").onclick=()=>isPlaying?stopPlayback():playSound();
+document.getElementById("volume").oninput=e=>{if(master)master.gain.value=+e.target.value};
+document.querySelectorAll(".sound-card").forEach(card=>card.onclick=()=>{
+ document.querySelectorAll(".sound-card").forEach(c=>c.classList.remove("active"));card.classList.add("active");
+ currentSound=card.dataset.sound;document.getElementById("soundName").textContent=soundNames[currentSound];
+ if(isPlaying){if(currentSound==="silence")stopPlayback();else playSound();}
+});
 
 async function startApp(){
  const {data:{session}}=await db.auth.getSession();
