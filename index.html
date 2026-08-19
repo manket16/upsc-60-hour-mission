@@ -26,7 +26,10 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 #accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
  .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
-</head>
+<style>
+.subtask{display:flex;align-items:center;gap:8px}
+.sub-delete{margin-left:auto;padding:6px 10px;font-size:12px}
+</style></head>
 <body>
 
 <section id="authScreen" class="panel auth">
@@ -216,6 +219,23 @@ function appendNewTaskCard(t){
    const st=document.createElement("span");
    st.textContent=newSub.title;
 
+   const subDelete=document.createElement("button");
+   subDelete.type="button";
+   subDelete.className="btn sub-delete";
+   subDelete.textContent="Delete";
+   subDelete.onclick=async()=>{
+     subDelete.disabled=true;
+     const {error}=await db.from("subtasks").delete()
+       .eq("id",newSub.id).eq("user_id",user.id);
+     if(error){
+       subDelete.disabled=false;
+       alert(error.message);
+       return;
+     }
+     row.remove();
+     if(!subWrap.children.length)subWrap.remove();
+   };
+
    sc.onchange=async()=>{
      const newDone=sc.checked;
      st.style.textDecoration=newDone?"line-through":"none";
@@ -229,7 +249,7 @@ function appendNewTaskCard(t){
      }
    };
 
-   row.append(sc,st);
+   row.append(sc,st,subDelete);
    subWrap.append(row);
  };
 
@@ -403,7 +423,24 @@ async function displayTasks(){
        }
      };
 
-     row.append(sc,st);
+     const subDelete=document.createElement("button");
+     subDelete.type="button";
+     subDelete.className="btn sub-delete";
+     subDelete.textContent="Delete";
+     subDelete.onclick=async()=>{
+       subDelete.disabled=true;
+       const {error}=await db.from("subtasks").delete()
+         .eq("id",sub.id).eq("user_id",user.id);
+       if(error){
+         subDelete.disabled=false;
+         alert(error.message);
+         return;
+       }
+       row.remove();
+       if(!wrap.children.length)wrap.remove();
+     };
+
+     row.append(sc,st,subDelete);
      wrap.append(row);
    }
 
