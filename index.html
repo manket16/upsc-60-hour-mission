@@ -144,60 +144,73 @@ async function ensureWeek(){
  if(error)throw error;
 
  if(data){
-   state=data;
-   localStorage.setItem(cacheKey,JSON.stringify({completed:Number(data.completed)||0,weekStart:week}));
- }else{
-   const cached=localStorage.getItem(cacheKey);
-   const cachedValue=cached?JSON.parse(cached):null;
-   const completed=cachedValue?Math.min(60,Math.max(0,Number(cachedValue.completed)||0)):0;
-
-   const {data:n,error:e}=await db.from("weekly_progress")
-     .insert({user_id:user.id,week_start:week,completed})
-     .select().single();
-
-   if(e)throw e;
-   state=n;
-   localStorage.setItem(cacheKey,JSON.stringify({completed,weekStart:week}));
+   // Supabase uses week_start; the UI uses weekStart.
+   // Keep both explicitly so refresh/reset can never send NULL.
+   state={...data,weekStart:data.week_start};
+   localStorage.setItem(cacheKey,JSON.stringify({
+     completed:Number(data.completed)||0,
+     weekStart:week
+   }));
+   return;
  }
+
+ const cached=localStorage.getItem(cacheKey);
+ const cachedValue=cached?JSON.parse(cached):null;
+ const completed=cachedValue
+   ? Math.min(60,Math.max(0,Number(cachedValue.completed)||0))
+   : 0;
+
+ const {data:n,error:e}=await db.from("weekly_progress")
+   .insert({
+     user_id:user.id,
+     week_start:week,
+     completed
+   })
+   .select().single();
+
+ if(e)throw e;
+
+ state={...n,weekStart:n.week_start||week};
+
+ localStorage.setItem(cacheKey,JSON.stringify({
+   completed,
+   weekStart:week
+ }));
 }
 
 async function saveProgress(){
  const completed=Math.min(60,Math.max(0,Number(state.completed)||0));
- state.completed=completed;
+ const week=state.weekStart||state.week_start||mondayKey();
 
- const cacheKey=`upsc60_progress_${user.id}_${state.weekStart}`;
+ state.completed=completed;
+ state.weekStart=week;
+ state.week_start=week;
+
+ const cacheKey=`upsc60_progress_${user.id}_${week}`;
+
+ // Save locally first so a temporary network problem cannot erase the
+ // visible progress.
  localStorage.setItem(cacheKey,JSON.stringify({
    completed,
-   weekStart:state.weekStart
+   weekStart:week
  }));
 
- let result;
+ // Update by the actual Supabase key fields. We do NOT insert here.
+ // This prevents the NULL week_start error and avoids duplicate rows.
+ const {data,error}=await db.from("weekly_progress")
+   .update({completed})
+   .eq("user_id",user.id)
+   .eq("week_start",week)
+   .select().maybeSingle();
 
- // Update the existing weekly row by its primary key. This is more reliable
- // than depending on a database-side unique constraint for upsert.
- if(state.id){
-   result=await db.from("weekly_progress")
-     .update({completed})
-     .eq("id",state.id)
-     .eq("user_id",user.id)
-     .select().single();
- }else{
-   result=await db.from("weekly_progress")
-     .insert({
-       user_id:user.id,
-       week_start:state.weekStart,
-       completed
-     })
-     .select().single();
+ if(error){
+   console.error("Progress save failed:",error);
+   throw error;
  }
 
- if(result.error){
-   console.error("Progress save failed:",result.error);
-   // Keep the local value so the manual click is never silently lost.
-   throw result.error;
+ if(data){
+   state={...data,weekStart:data.week_start||week};
  }
-
- if(result.data)state=result.data;
 
  localStorage.setItem(cacheKey,JSON.stringify({
    completed:Number(state.completed)||0,
