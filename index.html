@@ -27,7 +27,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
  .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
 <style>.sub-delete{padding:6px 10px;font-size:12px;flex:0 0 auto;white-space:nowrap}</style></head>
-<body class="booting>
+<body class="booting">
 
 <section id="authScreen" class="panel auth">
   <div class="muted">UPSC 60-HOUR MISSION</div>
@@ -37,8 +37,8 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
   <br><br>
   <input id="password" type="password" placeholder="Password">
   <div class="buttons" style="margin-top:12px">
-    <button class="btn primary" id="signIn">Sign in</button>
-    <button class="btn" id="signUp">Create account</button>
+    <button type="button" class="btn primary" id="signIn">Sign in</button>
+    <button type="button" class="btn" id="signUp">Create account</button>
   </div>
   <div id="authMsg" class="status"></div>
 </section>
