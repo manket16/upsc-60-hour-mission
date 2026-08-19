@@ -12,7 +12,7 @@ main{max-width:1080px;margin:auto;padding:22px}.hidden{display:none!important}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:var(--shadow);margin-top:16px}
 .auth{max-width:480px;margin:8vh auto;padding:28px}.auth h1{color:var(--pink-dark)}
 input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);border-radius:10px;padding:11px;color:var(--text);font:inherit}textarea{min-height:75px;resize:vertical}
-.btn{background:white;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 16px;cursor:pointer;font-size:15px}.btn:hover{border-color:var(--pink)}.primary{background:var(--pink);border-color:var(--pink);color:white;font-weight:700}
+.btn{background:white;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 16px;cursor:pointer;font-size:15px}.btn:hover{border-color:var(--pink)}.btn:disabled{opacity:.55;cursor:not-allowed}.primary{background:var(--pink);border-color:var(--pink);color:white;font-weight:700}
 .hero{position:relative;min-height:360px;border-radius:24px;overflow:hidden;background:#f3dbe4;display:flex;align-items:end}.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.hero:after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 15%,rgba(47,28,38,.78))}.hero-content{position:relative;z-index:2;padding:32px;color:white;max-width:780px}.eyebrow{font-size:13px;letter-spacing:.14em;font-weight:700}.hero h1{font-size:43px;line-height:1.05;margin:9px 0}.hero p{font-size:17px;line-height:1.5;margin:0}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.metric{font-size:31px;font-weight:800;color:var(--pink-dark)}.muted{color:var(--muted);font-size:14px}
 .countgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.countbox{background:var(--card2);border-radius:13px;padding:14px;text-align:center}.countbox strong{display:block;font-size:28px;color:var(--pink-dark)}
@@ -71,7 +71,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 
 <section class="panel"><div class="muted">TODAY'S TASKS</div><h2>What must get done today?</h2><div style="display:grid;gap:10px">
 <input id="taskInput" type="text" placeholder="Main task — e.g. Finish Fundamental Rights">
-<button class="btn primary" id="addTask">+ Add today's task</button></div><div class="task-list" id="taskList"></div></section>
+<button type="button" class="btn primary" id="addTask">+ Add today's task</button></div><div class="task-list" id="taskList"></div></section>
 
 <section class="panel"><div class="muted">TODAY'S LINE</div><div class="quote" id="quote"></div></section>
 <section class="panel"><div class="muted">WHY WORK HARD?</div><div class="quote">Time gone will never come back. Every hour you waste today becomes an hour you cannot recover before the exam. You do not need a perfect day. You need enough honest days stacked together that the result becomes difficult to deny.</div></section>
@@ -135,25 +135,83 @@ async function loadTasks(){
  await displayTasks();
 }
 
+let taskSaving = false;
+let lastTaskSubmission = {title:"", time:0};
+
 async function addTask(){
- const title=document.getElementById("taskInput").value.trim();
- if(!title)return;
- const {data:t,error}=await db.from("tasks").insert({user_id:user.id,task_date:todayKey(),title,done:false}).select().single();
- if(error)return alert(error.message);
- document.getElementById("taskInput").value="";
- await loadTasks();
+ const input=document.getElementById("taskInput");
+ const button=document.getElementById("addTask");
+ const title=input.value.trim();
+ if(!title || taskSaving)return;
+
+ const now=Date.now();
+ if(lastTaskSubmission.title===title && now-lastTaskSubmission.time<3000)return;
+
+ taskSaving=true;
+ lastTaskSubmission={title:title,time:now};
+ button.disabled=true;
+ button.textContent="Saving…";
+
+ try{
+   const {error}=await db.from("tasks").insert({
+     user_id:user.id,
+     task_date:todayKey(),
+     title:title,
+     done:false
+   });
+
+   // 23505 = PostgreSQL unique-constraint violation.
+   // It simply means this task already exists today.
+   if(error){
+     if(error.code==="23505"){
+       input.value="";
+       await loadTasks();
+       return;
+     }
+     throw error;
+   }
+
+   input.value="";
+   await loadTasks();
+ }catch(error){
+   console.error(error);
+   alert("Could not save the task. Please try again.");
+ }finally{
+   taskSaving=false;
+   button.disabled=false;
+   button.textContent="+ Add today's task";
+ }
 }
 
+document.getElementById("addTask").onclick=addTask;
+
+let displayGeneration = 0;
+
 async function displayTasks(){
+ const generation=++displayGeneration;
  const list=document.getElementById("taskList");
- list.innerHTML="";
- if(!tasks.length){
-   list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';
+ const currentTasks=[...tasks];
+
+ if(!currentTasks.length){
+   if(generation===displayGeneration){
+     list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';
+   }
    return;
  }
- for(const t of tasks){
-   const {data:subs,error:subError}=await db.from("subtasks").select("*").eq("task_id",t.id).order("created_at");
-   if(subError) console.error(subError);
+
+ const results=await Promise.all(currentTasks.map(async t=>{
+   const {data:subs,error}=await db.from("subtasks")
+     .select("*").eq("task_id",t.id).order("created_at");
+   if(error)console.error(error);
+   return {task:t,subs:subs||[]};
+ }));
+
+ // Ignore an older async render if a newer one has started.
+ if(generation!==displayGeneration)return;
+
+ list.innerHTML="";
+
+ for(const {task:t,subs} of results){
    const card=document.createElement("div");
    card.className="task"+(t.done?" done":"");
 
@@ -164,8 +222,9 @@ async function displayTasks(){
    cb.type="checkbox";
    cb.checked=t.done;
    cb.onchange=async()=>{
-     const {error}=await db.from("tasks").update({done:cb.checked}).eq("id",t.id).eq("user_id",user.id);
-     if(error) alert(error.message);
+     const {error}=await db.from("tasks")
+       .update({done:cb.checked}).eq("id",t.id).eq("user_id",user.id);
+     if(error)alert(error.message);
      await loadTasks();
    };
 
@@ -175,25 +234,26 @@ async function displayTasks(){
    head.append(cb,title);
    card.append(head);
 
-   if(subs?.length){
+   if(subs.length){
      const wrap=document.createElement("div");
      wrap.className="subtasks";
-     for(const s of subs){
+     for(const sub of subs){
        const row=document.createElement("label");
        row.className="subtask";
 
        const sc=document.createElement("input");
        sc.type="checkbox";
-       sc.checked=s.done;
+       sc.checked=sub.done;
        sc.onchange=async()=>{
-         const {error}=await db.from("subtasks").update({done:sc.checked}).eq("id",s.id).eq("user_id",user.id);
-         if(error) alert(error.message);
+         const {error}=await db.from("subtasks")
+           .update({done:sc.checked}).eq("id",sub.id).eq("user_id",user.id);
+         if(error)alert(error.message);
          await loadTasks();
        };
 
        const st=document.createElement("span");
-       st.textContent=s.title;
-       if(s.done)st.style.textDecoration="line-through";
+       st.textContent=sub.title;
+       if(sub.done)st.style.textDecoration="line-through";
 
        row.append(sc,st);
        wrap.append(row);
@@ -206,6 +266,7 @@ async function displayTasks(){
 
    const add=document.createElement("button");
    add.className="btn";
+   add.type="button";
    add.textContent="+ Add subtask";
    add.onclick=async()=>{
      const v=prompt("Subtask:");
@@ -213,18 +274,20 @@ async function displayTasks(){
        const {error}=await db.from("subtasks").insert({
          task_id:t.id,user_id:user.id,title:v.trim(),done:false
        });
-       if(error) alert(error.message);
+       if(error)alert(error.message);
        await loadTasks();
      }
    };
 
    const del=document.createElement("button");
    del.className="btn";
+   del.type="button";
    del.textContent="Delete";
    del.onclick=async()=>{
      if(confirm("Delete this task?")){
-       const {error}=await db.from("tasks").delete().eq("id",t.id).eq("user_id",user.id);
-       if(error) alert(error.message);
+       const {error}=await db.from("tasks")
+         .delete().eq("id",t.id).eq("user_id",user.id);
+       if(error)alert(error.message);
        await loadTasks();
      }
    };
@@ -234,8 +297,6 @@ async function displayTasks(){
    list.append(card);
  }
 }
-
-document.getElementById("addTask").onclick=addTask;
 
 function render(){
  const c=state.completed,p=Math.round(c/60*100);document.getElementById("doneMetric").textContent=`${c} / 60`;document.getElementById("minuteMetric").textContent=`${c*50} focused minutes`;document.getElementById("progress").textContent=`${c} / 60 hours`;document.getElementById("percent").textContent=p+"%";document.getElementById("fill").style.width=p+"%";
@@ -261,68 +322,168 @@ let audioCtx=null, master=null, soundNodes=[], soundTimer=null, currentSound="ra
 const soundNames={rain:"Rain",brown:"Brown Noise",piano:"Calm Piano",forest:"Forest",cafe:"Café",silence:"Silence"};
 
 function ensureAudio(){
- if(!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)();master=audioCtx.createGain();master.gain.value=+document.getElementById("volume").value;master.connect(audioCtx.destination);}
- if(audioCtx.state==="suspended")audioCtx.resume();
-}
-function stopSound(){
- soundNodes.forEach(n=>{try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}});
- soundNodes=[];if(soundTimer){clearInterval(soundTimer);soundTimer=null;}
-}
-function noiseBuffer(seconds=2){
- const b=audioCtx.createBuffer(1,audioCtx.sampleRate*seconds,audioCtx.sampleRate),d=b.getChannelData(0);
- for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b;
-}
-function addNoise(filterType,level,freq){
- const src=audioCtx.createBufferSource();src.buffer=noiseBuffer();src.loop=true;
- const f=audioCtx.createBiquadFilter();f.type=filterType;f.frequency.value=freq;
- const g=audioCtx.createGain();g.gain.value=level;src.connect(f);f.connect(g);g.connect(master);src.start();soundNodes.push(src);
-}
-function pianoNote(freq,when,duration=2.7,level=.028){
- const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type="sine";o.frequency.value=freq;
- g.gain.setValueAtTime(.0001,when);g.gain.exponentialRampToValueAtTime(level,when+.04);g.gain.exponentialRampToValueAtTime(.0001,when+duration);
- o.connect(g);g.connect(master);o.start(when);o.stop(when+duration+.1);soundNodes.push(o);
-}
-function playPiano(){
- const notes=[261.63,329.63,392,329.63,293.66,349.23,440,349.23];let i=0;
- const go=()=>{if(!isPlaying)return;let t=audioCtx.currentTime+.05;pianoNote(notes[i%8],t,2.7,.055);pianoNote(notes[(i+3)%8]/2,t,3.2,.025);i++;};
- go();soundTimer=setInterval(go,2600);
-}
-function playSound(){
- ensureAudio();stopSound();isPlaying=true;
- if(currentSound==="rain"){addNoise("lowpass",.70,3000);addNoise("highpass",.035,140);}
- else if(currentSound==="brown"){addNoise("lowpass",.90,450);}
- else if(currentSound==="forest"){addNoise("lowpass",.35,1200);addNoise("highpass",.055,220);}
- else if(currentSound==="cafe"){addNoise("bandpass",.38,900);addNoise("lowpass",.18,250);}
- else if(currentSound==="piano"){playPiano();}
- document.getElementById("audioToggle").textContent="■ Stop";
- document.getElementById("audioStatus").textContent=currentSound==="silence"?"Silence selected":"Playing "+soundNames[currentSound];
-}
-function stopPlayback(){isPlaying=false;stopSound();document.getElementById("audioToggle").textContent="▶ Play";document.getElementById("audioStatus").textContent="Paused";}
-document.getElementById("audioToggle").onclick=()=>isPlaying?stopPlayback():playSound();
-document.getElementById("volume").oninput=e=>{if(master)master.gain.value=+e.target.value};
-document.querySelectorAll(".sound-card").forEach(card=>card.onclick=()=>{
- document.querySelectorAll(".sound-card").forEach(c=>c.classList.remove("active"));
- card.classList.add("active");
- currentSound=card.dataset.sound;
- document.getElementById("soundName").textContent=soundNames[currentSound];
-
- // Selecting a sound also starts it, so the user does not need to press Play twice.
- if(currentSound==="silence"){
-   stopPlayback();
-   document.getElementById("soundName").textContent="Silence";
-   document.getElementById("audioStatus").textContent="Silence selected";
- }else{
-   playSound();
+ if(!audioCtx){
+   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+   master=audioCtx.createGain();
+   master.gain.value=0.05;
+   master.connect(audioCtx.destination);
  }
+ if(audioCtx.state!=="running") audioCtx.resume();
+}
+
+function stopSound(){
+ soundNodes.forEach(n=>{
+   try{if(n.stop)n.stop()}catch(e){}
+   try{n.disconnect()}catch(e){}
+ });
+ soundNodes=[];
+ if(soundTimer){clearTimeout(soundTimer);clearInterval(soundTimer);soundTimer=null;}
+}
+
+function makeNoise(seconds=3){
+ const b=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*seconds),audioCtx.sampleRate);
+ const d=b.getChannelData(0);
+ for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1);
+ return b;
+}
+
+function addFilteredNoise(type,cutoff,level){
+ const src=audioCtx.createBufferSource();
+ src.buffer=makeNoise(3);
+ src.loop=true;
+ const filter=audioCtx.createBiquadFilter();
+ filter.type=type;
+ filter.frequency.value=cutoff;
+ const gain=audioCtx.createGain();
+ gain.gain.value=level;
+ src.connect(filter).connect(gain).connect(master);
+ src.start();
+ soundNodes.push(src);
+}
+
+function pianoNote(freq,when,duration,level){
+ const o=audioCtx.createOscillator();
+ const g=audioCtx.createGain();
+ o.type="triangle";
+ o.frequency.setValueAtTime(freq,when);
+ g.gain.setValueAtTime(0.0001,when);
+ g.gain.exponentialRampToValueAtTime(level,when+0.06);
+ g.gain.exponentialRampToValueAtTime(0.0001,when+duration);
+ o.connect(g).connect(master);
+ o.start(when);
+ o.stop(when+duration+0.05);
+ soundNodes.push(o);
+}
+
+function schedulePiano(){
+ if(!isPlaying)return;
+ const notes=[261.63,329.63,392.00,329.63,293.66,349.23,440.00,349.23];
+ const i=Math.floor(Math.random()*notes.length);
+ const t=audioCtx.currentTime+0.05;
+ pianoNote(notes[i],t,2.4,0.18);
+ pianoNote(notes[(i+2)%notes.length]/2,t,2.8,0.07);
+ soundTimer=setTimeout(schedulePiano,2400);
+}
+
+function playSound(){
+ ensureAudio();
+ stopSound();
+ if(currentSound==="silence"){
+   isPlaying=false;
+   document.getElementById("audioToggle").textContent="▶ Play";
+   document.getElementById("audioStatus").textContent="Silence selected";
+   return;
+ }
+
+ isPlaying=true;
+
+ if(currentSound==="rain"){
+   addFilteredNoise("lowpass",3200,0.9);
+   addFilteredNoise("highpass",150,0.10);
+ }else if(currentSound==="brown"){
+   // Deep, clearly audible filtered noise.
+   addFilteredNoise("lowpass",650,1.0);
+ }else if(currentSound==="forest"){
+   // Soft wind-like filtered noise plus a slow modulation.
+   addFilteredNoise("lowpass",1400,0.75);
+   addFilteredNoise("highpass",180,0.12);
+ }else if(currentSound==="cafe"){
+   // Mid-frequency room murmur.
+   addFilteredNoise("bandpass",900,0.8);
+   addFilteredNoise("lowpass",300,0.35);
+ }else if(currentSound==="piano"){
+   schedulePiano();
+ }
+
+ document.getElementById("audioToggle").textContent="■ Stop";
+ document.getElementById("audioStatus").textContent="Playing "+soundNames[currentSound];
+}
+
+function stopPlayback(){
+ isPlaying=false;
+ stopSound();
+ document.getElementById("audioToggle").textContent="▶ Play";
+ document.getElementById("audioStatus").textContent="Paused";
+}
+
+document.getElementById("audioToggle").onclick=()=>{
+ if(isPlaying)stopPlayback();
+ else playSound();
+};
+
+document.getElementById("volume").oninput=e=>{
+ if(master)master.gain.value=Number(e.target.value)*2.5;
+};
+
+document.querySelectorAll(".sound-card").forEach(card=>{
+ card.onclick=()=>{
+   document.querySelectorAll(".sound-card").forEach(c=>c.classList.remove("active"));
+   card.classList.add("active");
+   currentSound=card.dataset.sound;
+   document.getElementById("soundName").textContent=soundNames[currentSound];
+   playSound();
+ };
 });
+
+let appStarting=false;
+let loadedUserId=null;
 
 async function startApp(){
  const {data:{session}}=await db.auth.getSession();
- if(!session){document.getElementById("authScreen").classList.remove("hidden");document.getElementById("app").classList.add("hidden");return}
- user=session.user;document.getElementById("accountEmail").textContent=user.email||"Signed in";
- try{await ensureWeek();await loadTasks();render();document.getElementById("authScreen").classList.add("hidden");document.getElementById("app").classList.remove("hidden")}catch(e){document.getElementById("authMsg").textContent=e.message}
+ if(!session){
+   loadedUserId=null;
+   document.getElementById("authScreen").classList.remove("hidden");
+   document.getElementById("app").classList.add("hidden");
+   return;
+ }
+ if(appStarting)return;
+ if(loadedUserId===session.user.id)return;
+
+ appStarting=true;
+ user=session.user;
+ document.getElementById("accountEmail").textContent=user.email||"Signed in";
+ try{
+   await ensureWeek();
+   await loadTasks();
+   render();
+   loadedUserId=user.id;
+   document.getElementById("authScreen").classList.add("hidden");
+   document.getElementById("app").classList.remove("hidden");
+ }catch(e){
+   document.getElementById("authMsg").textContent=e.message;
+ }finally{
+   appStarting=false;
+ }
 }
-db.auth.onAuthStateChange(()=>startApp());
+db.auth.onAuthStateChange((event,session)=>{
+ if(event==="SIGNED_OUT"){
+   loadedUserId=null;
+   startApp();
+ }else if(event==="SIGNED_IN" && session){
+   loadedUserId=null;
+   startApp();
+ }
+});
 startApp();timerRender();countdown();setInterval(countdown,1000);
 </script>
 </body>
