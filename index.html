@@ -20,16 +20,13 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 .progress{height:12px;background:#f3e5ea;border-radius:99px;overflow:hidden}.fill{height:100%;width:0;background:var(--pink);transition:.2s}
 .sessions{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin-top:14px}.session{aspect-ratio:1;border:1px solid var(--border);border-radius:9px;background:#fffafb;color:var(--muted);cursor:pointer;font-weight:650}.session.done{background:var(--green);color:white;border-color:var(--green)}
 .quote{font-size:18px;line-height:1.55;font-weight:650}.why{display:grid;grid-template-columns:1fr 1fr;gap:14px}.whybox{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:19px;line-height:1.55}
-.task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .done-title{text-decoration:line-through;opacity:.65}.task-title{text-decoration:line-through;color:var(--muted)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;gap:8px;align-items:center}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .done-title{text-decoration:line-through;opacity:.65}.task-title{text-decoration:none;color:var(--text)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;width:100%;align-items:center;gap:8px}.subtask input{flex:0 0 18px;width:18px;height:18px;margin:0}.subtask span{flex:1;min-width:0}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .audio-row{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);padding:14px;border-radius:12px}.audio-row>div{flex:1}input[type=range]{accent-color:var(--pink);width:100%}
 .break-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.break-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:17px;min-height:145px}.break-card a{color:var(--pink-dark);text-decoration:none}.small{text-align:center;color:var(--muted);font-size:13px;margin-top:10px}.status{margin-top:10px;color:var(--green);font-weight:650;min-height:20px}
 #accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
  .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
-<style>
-.subtask{display:flex;align-items:center;gap:8px}
-.sub-delete{margin-left:auto;padding:6px 10px;font-size:12px}
-</style></head>
+<style>.sub-delete{padding:6px 10px;font-size:12px;flex:0 0 auto}</style></head>
 <body>
 
 <section id="authScreen" class="panel auth">
