@@ -18,7 +18,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 .countgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.countbox{background:var(--card2);border-radius:13px;padding:14px;text-align:center}.countbox strong{display:block;font-size:28px;color:var(--pink-dark)}
 .timer{font-size:76px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;color:var(--pink-dark);line-height:1.1}.mode{text-align:center;font-weight:800;color:var(--pink-dark);letter-spacing:.12em;margin:8px}.buttons{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
 .progress{height:12px;background:#f3e5ea;border-radius:99px;overflow:hidden}.fill{height:100%;width:0;background:var(--pink);transition:.2s}
-.sessions{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin-top:14px}.session{aspect-ratio:1;border:1px solid var(--border);border-radius:9px;background:#fffafb;color:var(--muted);cursor:pointer;font-weight:650}.session.done{background:var(--green);color:white;border-color:var(--green)}
+.sessions{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin-top:14px}.session{aspect-ratio:1;user-select:none;cursor:pointer;border:1px solid var(--border);border-radius:9px;background:#fffafb;color:var(--muted);cursor:pointer;font-weight:650}.session.done{background:var(--green);color:white;border-color:var(--green)}
 .quote{font-size:18px;line-height:1.55;font-weight:650}.why{display:grid;grid-template-columns:1fr 1fr;gap:14px}.whybox{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:19px;line-height:1.55}
 .task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .done-title{text-decoration:line-through;opacity:.65}.task-title{text-decoration:none;color:var(--text)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;width:100%;align-items:center;gap:8px;padding:4px 0}.subtask input{flex:0 0 18px;width:18px;height:18px;margin:0}.subtask span{flex:1;min-width:0}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .audio-row{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);padding:14px;border-radius:12px}.audio-row>div{flex:1}input[type=range]{accent-color:var(--pink);width:100%}
@@ -530,7 +530,33 @@ async function displayTasks(){
 function render(){
  const c=state.completed,p=Math.round(c/60*100);document.getElementById("doneMetric").textContent=`${c} / 60`;document.getElementById("minuteMetric").textContent=`${c*50} focused minutes`;document.getElementById("progress").textContent=`${c} / 60 hours`;document.getElementById("percent").textContent=p+"%";document.getElementById("fill").style.width=p+"%";
  const box=document.getElementById("sessions");box.innerHTML="";
- for(let i=0;i<60;i++){const b=document.createElement("button");b.className="session"+(i<c?" done":"");b.textContent=i<c?"✓":i+1;b.onclick=async()=>{if(i<c){state.completed--;await saveProgress();render()}};box.append(b)}
+ for(let i=0;i<60;i++){
+   const b=document.createElement("button");
+   b.type="button";
+   b.className="session"+(i<c?" done":"");
+   b.textContent=i<c?"✓":i+1;
+   b.setAttribute("aria-label",i<c?`Hour ${i+1} completed`:`Hour ${i+1} not completed`);
+
+   // Manual backup: if the user completed an hour but forgot to run
+   // the Pomodoro, they can mark exactly one hour complete here.
+   b.onclick=async()=>{
+     if(i < state.completed){
+       // Undo an accidentally completed hour.
+       state.completed--;
+     }else if(i === state.completed && state.completed < 60){
+       // Manual backup: mark the next hour complete.
+       state.completed++;
+     }else{
+       // Prevent skipping ahead (e.g. clicking hour 10 when only 2 are done).
+       return;
+     }
+
+     await saveProgress();
+     render();
+   };
+
+   box.append(b);
+ }
 }
 document.getElementById("resetWeek").onclick=async()=>{if(confirm("Reset this week's progress?")){state.completed=0;await saveProgress();render()}};
 
@@ -564,12 +590,18 @@ function playCompletionChime(type){
 
 async function switchMode(){
  if(!breakMode){
+   // Only a completed 50-minute FOCUS session earns one green hour.
    playCompletionChime("focus");
-   if(state.completed<60){state.completed++;await saveProgress();render()}
+   if(state.completed<60){
+     state.completed++;
+     await saveProgress();
+     render();
+   }
    breakMode=true;
    remaining=600;
    document.getElementById("mode").textContent="BREAK";
  }else{
+   // The 10-minute BREAK never adds an hour or changes the green boxes.
    playCompletionChime("break");
    breakMode=false;
    remaining=3000;
