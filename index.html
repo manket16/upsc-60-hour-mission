@@ -120,11 +120,18 @@ const todayKey=()=>new Date().toISOString().slice(0,10);
 
 function msg(t){document.getElementById("authMsg").textContent=t}
 async function signUp(){const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;if(!email||password.length<6)return msg("Enter an email and a password of at least 6 characters.");const {error}=await db.auth.signUp({email,password});msg(error?error.message:"Account created. Check your email if confirmation is enabled, then sign in.")}
-async function signIn(){const email=document.getElementById("email").value.trim(),password=document.getElementById("password").value;const {error}=await db.auth.signInWithPassword({email,password});if(error)msg(error.message)}
+async function signIn(){
+ const email=document.getElementById("email").value.trim();
+ const password=document.getElementById("password").value;
+ if(!email||!password)return msg("Enter your email and password.");
+ msg("Signing in…");
+ const {error}=await db.auth.signInWithPassword({email,password});
+ if(error)msg(error.message);
+}
 document.getElementById("signUp").onclick=signUp;document.getElementById("signIn").onclick=signIn;
 document.getElementById("signOut").onclick=()=>db.auth.signOut();
 
-async async function ensureWeek(){
+async function ensureWeek(){
  const week=mondayKey();
  const cacheKey=`upsc60_progress_${user.id}_${week}`;
 
@@ -157,26 +164,47 @@ async async function ensureWeek(){
 async function saveProgress(){
  const completed=Math.min(60,Math.max(0,Number(state.completed)||0));
  state.completed=completed;
+
  const cacheKey=`upsc60_progress_${user.id}_${state.weekStart}`;
- localStorage.setItem(cacheKey,JSON.stringify({completed,weekStart:state.weekStart}));
+ localStorage.setItem(cacheKey,JSON.stringify({
+   completed,
+   weekStart:state.weekStart
+ }));
 
- const {data,error}=await db.from("weekly_progress")
-   .upsert(
-     {user_id:user.id,week_start:state.weekStart,completed},
-     {onConflict:"user_id,week_start"}
-   )
-   .select().single();
+ let result;
 
- if(error){
-   console.error("Progress save failed:",error);
-   throw error;
+ // Update the existing weekly row by its primary key. This is more reliable
+ // than depending on a database-side unique constraint for upsert.
+ if(state.id){
+   result=await db.from("weekly_progress")
+     .update({completed})
+     .eq("id",state.id)
+     .eq("user_id",user.id)
+     .select().single();
+ }else{
+   result=await db.from("weekly_progress")
+     .insert({
+       user_id:user.id,
+       week_start:state.weekStart,
+       completed
+     })
+     .select().single();
  }
- if(data)state=data;
+
+ if(result.error){
+   console.error("Progress save failed:",result.error);
+   // Keep the local value so the manual click is never silently lost.
+   throw result.error;
+ }
+
+ if(result.data)state=result.data;
+
  localStorage.setItem(cacheKey,JSON.stringify({
    completed:Number(state.completed)||0,
    weekStart:state.weekStart
  }));
 }
+
 
 async function loadTasks(){
  const {data,error}=await db.from("tasks").select("*").eq("user_id",user.id).eq("task_date",todayKey()).order("created_at");
@@ -601,13 +629,37 @@ function render(){
        return;
      }
 
-     try{await saveProgress();render()}catch(e){alert("Progress could not be saved to the cloud: "+e.message)}
+     render();
+     try{
+       await saveProgress();
+       render();
+     }catch(e){
+       alert("The hour is kept on this device, but cloud saving failed: "+e.message);
+     }
    };
 
    box.append(b);
  }
 }
-document.getElementById("resetWeek").onclick=async()=>{if(confirm("Reset this week's progress?")){state.completed=0;await saveProgress();render()}};
+document.getElementById("resetWeek").onclick=async()=>{
+ if(!confirm("Reset this week's progress to 0 hours?"))return;
+
+ const previous=state.completed;
+ state.completed=0;
+
+ // Update the screen immediately.
+ render();
+
+ try{
+   await saveProgress();
+   render();
+ }catch(e){
+   // Restore the previous value if the cloud update failed.
+   state.completed=previous;
+   render();
+   alert("Could not reset the cloud progress: "+e.message);
+ }
+};
 
 function countdown(){let d=Math.max(0,EXAM-Date.now()),a=Math.floor(d/86400000);d%=86400000;let h=Math.floor(d/3600000);d%=3600000;let m=Math.floor(d/60000);d%=60000;let s=Math.floor(d/1000);document.getElementById("days").textContent=a;document.getElementById("hours").textContent=h;document.getElementById("mins").textContent=m;document.getElementById("secs").textContent=s;document.getElementById("daysMetric").textContent=a}
 
