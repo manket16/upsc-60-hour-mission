@@ -7,7 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#fff7fa;--card:#fff;--card2:#fff0f5;--text:#352b30;--muted:#806d75;--pink:#d96b91;--pink-dark:#b84d75;--border:#efd3de;--green:#5b9b79;--shadow:0 8px 28px rgba(150,80,110,.08)}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+*{box-sizing:border-box}body.booting #authScreen,body.booting #app{display:none!important}body.booting:before{content:"Loading your UPSC tracker…";position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);color:var(--muted);font:600 16px system-ui;z-index:9999}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
 main{max-width:1080px;margin:auto;padding:22px}.hidden{display:none!important}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:var(--shadow);margin-top:16px}
 .auth{max-width:480px;margin:8vh auto;padding:28px}.auth h1{color:var(--pink-dark)}
@@ -27,7 +27,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
  .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
 <style>.sub-delete{padding:6px 10px;font-size:12px;flex:0 0 auto;white-space:nowrap}</style></head>
-<body>
+<body class="booting>
 
 <section id="authScreen" class="panel auth">
   <div class="muted">UPSC 60-HOUR MISSION</div>
@@ -105,7 +105,14 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 <script>
 const SUPABASE_URL="https://lkardvaarttsgrfptnrq.supabase.co";
 const SUPABASE_ANON_KEY="sb_publishable_KdsPVEPXHjMZ3lku_YqDXQ_36lACkXn";
-const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+ auth:{
+   persistSession:true,
+   autoRefreshToken:true,
+   detectSessionInUrl:true,
+   storage:window.localStorage
+ }
+});
 const EXAM=new Date("2027-05-22T00:00:00+05:30");
 let user=null, state={weekStart:"",completed:0}, tasks=[];
 const mondayKey=(d=new Date())=>{const x=new Date(d),day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x.toISOString().slice(0,10)};
@@ -117,17 +124,60 @@ async function signIn(){const email=document.getElementById("email").value.trim(
 document.getElementById("signUp").onclick=signUp;document.getElementById("signIn").onclick=signIn;
 document.getElementById("signOut").onclick=()=>db.auth.signOut();
 
-async function ensureWeek(){
+async async function ensureWeek(){
  const week=mondayKey();
- const {data,error}=await db.from("weekly_progress").select("*").eq("user_id",user.id).eq("week_start",week).maybeSingle();
+ const cacheKey=`upsc60_progress_${user.id}_${week}`;
+
+ const {data,error}=await db.from("weekly_progress")
+   .select("*")
+   .eq("user_id",user.id)
+   .eq("week_start",week)
+   .maybeSingle();
+
  if(error)throw error;
- if(data)state=data;
- else{const {data:n,error:e}=await db.from("weekly_progress").insert({user_id:user.id,week_start:week,completed:0}).select().single();if(e)throw e;state=n}
+
+ if(data){
+   state=data;
+   localStorage.setItem(cacheKey,JSON.stringify({completed:Number(data.completed)||0,weekStart:week}));
+ }else{
+   const cached=localStorage.getItem(cacheKey);
+   const cachedValue=cached?JSON.parse(cached):null;
+   const completed=cachedValue?Math.min(60,Math.max(0,Number(cachedValue.completed)||0)):0;
+
+   const {data:n,error:e}=await db.from("weekly_progress")
+     .insert({user_id:user.id,week_start:week,completed})
+     .select().single();
+
+   if(e)throw e;
+   state=n;
+   localStorage.setItem(cacheKey,JSON.stringify({completed,weekStart:week}));
+ }
 }
+
 async function saveProgress(){
- const {error}=await db.from("weekly_progress").upsert({user_id:user.id,week_start:state.weekStart,completed:state.completed},{onConflict:"user_id,week_start"});
- if(error)console.error(error);
+ const completed=Math.min(60,Math.max(0,Number(state.completed)||0));
+ state.completed=completed;
+ const cacheKey=`upsc60_progress_${user.id}_${state.weekStart}`;
+ localStorage.setItem(cacheKey,JSON.stringify({completed,weekStart:state.weekStart}));
+
+ const {data,error}=await db.from("weekly_progress")
+   .upsert(
+     {user_id:user.id,week_start:state.weekStart,completed},
+     {onConflict:"user_id,week_start"}
+   )
+   .select().single();
+
+ if(error){
+   console.error("Progress save failed:",error);
+   throw error;
+ }
+ if(data)state=data;
+ localStorage.setItem(cacheKey,JSON.stringify({
+   completed:Number(state.completed)||0,
+   weekStart:state.weekStart
+ }));
 }
+
 async function loadTasks(){
  const {data,error}=await db.from("tasks").select("*").eq("user_id",user.id).eq("task_date",todayKey()).order("created_at");
  if(error)throw error;
@@ -551,8 +601,7 @@ function render(){
        return;
      }
 
-     await saveProgress();
-     render();
+     try{await saveProgress();render()}catch(e){alert("Progress could not be saved to the cloud: "+e.message)}
    };
 
    box.append(b);
@@ -594,8 +643,7 @@ async function switchMode(){
    playCompletionChime("focus");
    if(state.completed<60){
      state.completed++;
-     await saveProgress();
-     render();
+     try{await saveProgress();render()}catch(e){alert("Progress could not be saved to the cloud: "+e.message)}
    }
    breakMode=true;
    remaining=600;
@@ -748,19 +796,36 @@ let appStarting=false;
 let loadedUserId=null;
 
 async function startApp(){
- const {data:{session}}=await db.auth.getSession();
- if(!session){
-   loadedUserId=null;
+ const {data:{session},error:sessionError}=await db.auth.getSession();
+
+ if(sessionError){
+   document.getElementById("authMsg").textContent=sessionError.message;
+   document.body.classList.remove("booting");
    document.getElementById("authScreen").classList.remove("hidden");
    document.getElementById("app").classList.add("hidden");
    return;
  }
+
+ if(!session){
+   loadedUserId=null;
+   document.body.classList.remove("booting");
+   document.getElementById("authScreen").classList.remove("hidden");
+   document.getElementById("app").classList.add("hidden");
+   return;
+ }
+
  if(appStarting)return;
- if(loadedUserId===session.user.id)return;
+ if(loadedUserId===session.user.id){
+   document.body.classList.remove("booting");
+   document.getElementById("authScreen").classList.add("hidden");
+   document.getElementById("app").classList.remove("hidden");
+   return;
+ }
 
  appStarting=true;
  user=session.user;
  document.getElementById("accountEmail").textContent=user.email||"Signed in";
+
  try{
    await ensureWeek();
    await loadTasks();
@@ -769,11 +834,16 @@ async function startApp(){
    document.getElementById("authScreen").classList.add("hidden");
    document.getElementById("app").classList.remove("hidden");
  }catch(e){
+   console.error(e);
    document.getElementById("authMsg").textContent=e.message;
+   document.getElementById("authScreen").classList.remove("hidden");
+   document.getElementById("app").classList.add("hidden");
  }finally{
    appStarting=false;
+   document.body.classList.remove("booting");
  }
 }
+
 db.auth.onAuthStateChange((event,session)=>{
  if(event==="SIGNED_OUT"){
    loadedUserId=null;
