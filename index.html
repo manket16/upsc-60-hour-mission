@@ -20,7 +20,7 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 .progress{height:12px;background:#f3e5ea;border-radius:99px;overflow:hidden}.fill{height:100%;width:0;background:var(--pink);transition:.2s}
 .sessions{display:grid;grid-template-columns:repeat(10,1fr);gap:8px;margin-top:14px}.session{aspect-ratio:1;border:1px solid var(--border);border-radius:9px;background:#fffafb;color:var(--muted);cursor:pointer;font-weight:650}.session.done{background:var(--green);color:white;border-color:var(--green)}
 .quote{font-size:18px;line-height:1.55;font-weight:650}.why{display:grid;grid-template-columns:1fr 1fr;gap:14px}.whybox{background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:19px;line-height:1.55}
-.task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .task-title{text-decoration:line-through;color:var(--muted)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;gap:8px;align-items:center}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.task-list{display:grid;gap:10px;margin-top:14px}.task{background:#fffafd;border:1px solid var(--border);border-radius:13px;padding:13px}.task-head{display:flex;gap:10px;align-items:flex-start}.task-head input,.subtask input{accent-color:var(--pink)}.task-head input{width:18px;height:18px;margin-top:3px}.task.done .done-title{text-decoration:line-through;opacity:.65}.task-title{text-decoration:line-through;color:var(--muted)}.subtasks{margin:10px 0 0 28px;display:grid;gap:7px}.subtask{display:flex;gap:8px;align-items:center}.task-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .audio-row{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--border);padding:14px;border-radius:12px}.audio-row>div{flex:1}input[type=range]{accent-color:var(--pink);width:100%}
 .break-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.break-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:17px;min-height:145px}.break-card a{color:var(--pink-dark);text-decoration:none}.small{text-align:center;color:var(--muted);font-size:13px;margin-top:10px}.status{margin-top:10px;color:var(--green);font-weight:650;min-height:20px}
 #accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
@@ -138,6 +138,133 @@ async function loadTasks(){
 let taskSaving = false;
 let lastTaskSubmission = {title:"", time:0};
 
+function appendNewTaskCard(t){
+ const list=document.getElementById("taskList");
+
+ // Remove the empty-state message if this is the first task.
+ if(!tasks.length)list.innerHTML="";
+
+ const card=document.createElement("div");
+ card.className="task";
+ card.dataset.taskId=t.id;
+
+ const head=document.createElement("div");
+ head.className="task-head";
+
+ const cb=document.createElement("input");
+ cb.type="checkbox";
+ cb.checked=false;
+
+ const title=document.createElement("div");
+ title.className="task-title";
+ title.textContent=t.title;
+
+ cb.onchange=async()=>{
+   const newDone=cb.checked;
+   card.classList.toggle("done",newDone);
+   title.classList.toggle("done-title",newDone);
+
+   const {error}=await db.from("tasks").update({done:newDone})
+     .eq("id",t.id).eq("user_id",user.id);
+
+   if(error){
+     cb.checked=!newDone;
+     card.classList.toggle("done",!newDone);
+     title.classList.toggle("done-title",!newDone);
+     alert(error.message);
+     return;
+   }
+   const local=tasks.find(x=>x.id===t.id);
+   if(local)local.done=newDone;
+ };
+
+ head.append(cb,title);
+ card.append(head);
+
+ const actions=document.createElement("div");
+ actions.className="task-actions";
+
+ const add=document.createElement("button");
+ add.className="btn";
+ add.type="button";
+ add.textContent="+ Add subtask";
+
+ add.onclick=async()=>{
+   const v=prompt("Subtask:");
+   if(!v?.trim())return;
+
+   const {data:newSub,error}=await db.from("subtasks").insert({
+     task_id:t.id,user_id:user.id,title:v.trim(),done:false
+   }).select().single();
+
+   if(error){alert(error.message);return;}
+
+   let subWrap=card.querySelector(".subtasks");
+   if(!subWrap){
+     subWrap=document.createElement("div");
+     subWrap.className="subtasks";
+     card.insertBefore(subWrap,actions);
+   }
+
+   const row=document.createElement("label");
+   row.className="subtask";
+   row.dataset.subtaskId=newSub.id;
+
+   const sc=document.createElement("input");
+   sc.type="checkbox";
+
+   const st=document.createElement("span");
+   st.textContent=newSub.title;
+
+   sc.onchange=async()=>{
+     const newDone=sc.checked;
+     st.style.textDecoration=newDone?"line-through":"none";
+     const {error}=await db.from("subtasks").update({done:newDone})
+       .eq("id",newSub.id).eq("user_id",user.id);
+
+     if(error){
+       sc.checked=!newDone;
+       st.style.textDecoration=!newDone?"line-through":"none";
+       alert(error.message);
+     }
+   };
+
+   row.append(sc,st);
+   subWrap.append(row);
+ };
+
+ const del=document.createElement("button");
+ del.className="btn";
+ del.type="button";
+ del.textContent="Delete";
+
+ del.onclick=async()=>{
+   if(!confirm("Delete this task?"))return;
+   del.disabled=true;
+
+   const {error}=await db.from("tasks").delete()
+     .eq("id",t.id).eq("user_id",user.id);
+
+   if(error){
+     del.disabled=false;
+     alert(error.message);
+     return;
+   }
+
+   const idx=tasks.findIndex(x=>x.id===t.id);
+   if(idx>=0)tasks.splice(idx,1);
+   card.remove();
+
+   if(!tasks.length){
+     list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';
+   }
+ };
+
+ actions.append(add,del);
+ card.append(actions);
+ list.append(card);
+}
+
 async function addTask(){
  const input=document.getElementById("taskInput");
  const button=document.getElementById("addTask");
@@ -153,26 +280,26 @@ async function addTask(){
  button.textContent="Saving…";
 
  try{
-   const {error}=await db.from("tasks").insert({
+   const {data:newTask,error}=await db.from("tasks").insert({
      user_id:user.id,
      task_date:todayKey(),
      title:title,
      done:false
-   });
+   }).select().single();
 
-   // 23505 = PostgreSQL unique-constraint violation.
-   // It simply means this task already exists today.
    if(error){
      if(error.code==="23505"){
        input.value="";
-       await loadTasks();
        return;
      }
      throw error;
    }
 
+   tasks.push(newTask);
    input.value="";
-   await loadTasks();
+
+   // Add only the new card. The existing task list is never rebuilt.
+   appendNewTaskCard(newTask);
  }catch(error){
    console.error(error);
    alert("Could not save the task. Please try again.");
@@ -193,9 +320,8 @@ async function displayTasks(){
  const currentTasks=[...tasks];
 
  if(!currentTasks.length){
-   if(generation===displayGeneration){
+   if(generation===displayGeneration)
      list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';
-   }
    return;
  }
 
@@ -206,14 +332,13 @@ async function displayTasks(){
    return {task:t,subs:subs||[]};
  }));
 
- // Ignore an older async render if a newer one has started.
  if(generation!==displayGeneration)return;
-
  list.innerHTML="";
 
  for(const {task:t,subs} of results){
    const card=document.createElement("div");
    card.className="task"+(t.done?" done":"");
+   card.dataset.taskId=t.id;
 
    const head=document.createElement("div");
    head.className="task-head";
@@ -222,44 +347,67 @@ async function displayTasks(){
    cb.type="checkbox";
    cb.checked=t.done;
    cb.onchange=async()=>{
+     const newDone=cb.checked;
+     // Update the visible card immediately; do not rebuild the whole list.
+     card.classList.toggle("done",newDone);
+     title.classList.toggle("done-title",newDone);
+
      const {error}=await db.from("tasks")
-       .update({done:cb.checked}).eq("id",t.id).eq("user_id",user.id);
-     if(error)alert(error.message);
-     await loadTasks();
+       .update({done:newDone}).eq("id",t.id).eq("user_id",user.id);
+
+     if(error){
+       cb.checked=!newDone;
+       card.classList.toggle("done",!newDone);
+       title.classList.toggle("done-title",!newDone);
+       alert(error.message);
+       return;
+     }
+     const local=tasks.find(x=>x.id===t.id);
+     if(local)local.done=newDone;
    };
 
    const title=document.createElement("div");
    title.className="task-title";
    title.textContent=t.title;
+   if(t.done)title.classList.add("done-title");
    head.append(cb,title);
    card.append(head);
 
-   if(subs.length){
-     const wrap=document.createElement("div");
-     wrap.className="subtasks";
-     for(const sub of subs){
-       const row=document.createElement("label");
-       row.className="subtask";
+   const wrap=document.createElement("div");
+   wrap.className="subtasks";
 
-       const sc=document.createElement("input");
-       sc.type="checkbox";
-       sc.checked=sub.done;
-       sc.onchange=async()=>{
-         const {error}=await db.from("subtasks")
-           .update({done:sc.checked}).eq("id",sub.id).eq("user_id",user.id);
-         if(error)alert(error.message);
-         await loadTasks();
-       };
+   for(const sub of subs){
+     const row=document.createElement("label");
+     row.className="subtask";
+     row.dataset.subtaskId=sub.id;
 
-       const st=document.createElement("span");
-       st.textContent=sub.title;
-       if(sub.done)st.style.textDecoration="line-through";
+     const sc=document.createElement("input");
+     sc.type="checkbox";
+     sc.checked=sub.done;
 
-       row.append(sc,st);
-       wrap.append(row);
-     }
-     card.append(wrap);
+     const st=document.createElement("span");
+     st.textContent=sub.title;
+     if(sub.done)st.style.textDecoration="line-through";
+
+     sc.onchange=async()=>{
+       const newDone=sc.checked;
+       st.style.textDecoration=newDone?"line-through":"none";
+
+       const {error}=await db.from("subtasks")
+         .update({done:newDone}).eq("id",sub.id).eq("user_id",user.id);
+
+       if(error){
+         sc.checked=!newDone;
+         st.style.textDecoration=!newDone?"line-through":"none";
+         alert(error.message);
+       }
+     };
+
+     row.append(sc,st);
+     wrap.append(row);
    }
+
+   if(subs.length)card.append(wrap);
 
    const actions=document.createElement("div");
    actions.className="task-actions";
@@ -270,13 +418,47 @@ async function displayTasks(){
    add.textContent="+ Add subtask";
    add.onclick=async()=>{
      const v=prompt("Subtask:");
-     if(v?.trim()){
-       const {error}=await db.from("subtasks").insert({
-         task_id:t.id,user_id:user.id,title:v.trim(),done:false
-       });
-       if(error)alert(error.message);
-       await loadTasks();
+     if(!v?.trim())return;
+
+     const {data:newSub,error}=await db.from("subtasks").insert({
+       task_id:t.id,user_id:user.id,title:v.trim(),done:false
+     }).select().single();
+
+     if(error){alert(error.message);return;}
+
+     // Add only the new subtask to this task; don't reload every task.
+     let subWrap=card.querySelector(".subtasks");
+     if(!subWrap){
+       subWrap=document.createElement("div");
+       subWrap.className="subtasks";
+       card.insertBefore(subWrap,actions);
      }
+
+     const row=document.createElement("label");
+     row.className="subtask";
+     row.dataset.subtaskId=newSub.id;
+
+     const sc=document.createElement("input");
+     sc.type="checkbox";
+     sc.checked=false;
+
+     const st=document.createElement("span");
+     st.textContent=newSub.title;
+
+     sc.onchange=async()=>{
+       const newDone=sc.checked;
+       st.style.textDecoration=newDone?"line-through":"none";
+       const {error}=await db.from("subtasks")
+         .update({done:newDone}).eq("id",newSub.id).eq("user_id",user.id);
+       if(error){
+         sc.checked=!newDone;
+         st.style.textDecoration=!newDone?"line-through":"none";
+         alert(error.message);
+       }
+     };
+
+     row.append(sc,st);
+     subWrap.append(row);
    };
 
    const del=document.createElement("button");
@@ -284,12 +466,25 @@ async function displayTasks(){
    del.type="button";
    del.textContent="Delete";
    del.onclick=async()=>{
-     if(confirm("Delete this task?")){
-       const {error}=await db.from("tasks")
-         .delete().eq("id",t.id).eq("user_id",user.id);
-       if(error)alert(error.message);
-       await loadTasks();
+     if(!confirm("Delete this task?"))return;
+
+     del.disabled=true;
+     const {error}=await db.from("tasks")
+       .delete().eq("id",t.id).eq("user_id",user.id);
+
+     if(error){
+       del.disabled=false;
+       alert(error.message);
+       return;
      }
+
+     // Remove only this card and local task; keep the rest of the list untouched.
+     const idx=tasks.findIndex(x=>x.id===t.id);
+     if(idx>=0)tasks.splice(idx,1);
+     card.remove();
+
+     if(!tasks.length)
+       list.innerHTML='<div class="muted">No tasks yet. Add the first important task for today.</div>';
    };
 
    actions.append(add,del);
