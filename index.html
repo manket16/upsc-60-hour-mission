@@ -99,6 +99,8 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 <div class="break-card"><strong>🎧 Listen to Spotify music</strong><p class="muted">Listen to one song or a short playlist.</p><a class="btn" style="display:inline-block" href="https://open.spotify.com/" target="_blank" rel="noopener">Open Spotify ↗</a></div>
 <div class="break-card"><strong>❤️ Talk to Mom</strong><p class="muted">Have a short conversation and return refreshed.</p><button class="btn breakDone">Done</button></div>
 <div class="break-card"><strong>🚶 Stretch & Walk</strong><p class="muted">Stand up, stretch, walk around and reset your body.</p><button class="btn breakDone">Done</button></div>
+<div class="break-card"><strong>🧘 Meditation</strong><p class="muted">Take a few slow breaths and clear your mind.</p><button class="btn breakDone">Done</button></div>
+<div class="break-card"><strong>💧 Drink Water</strong><p class="muted">Drink some water before starting the next focus session.</p><button class="btn breakDone">Done</button></div>
 </div><div class="status" id="breakStatus"></div></section>
 </main>
 
@@ -676,8 +678,11 @@ document.getElementById("resetWeek").onclick=async()=>{
 
 function countdown(){let d=Math.max(0,EXAM-Date.now()),a=Math.floor(d/86400000);d%=86400000;let h=Math.floor(d/3600000);d%=3600000;let m=Math.floor(d/60000);d%=60000;let s=Math.floor(d/1000);document.getElementById("days").textContent=a;document.getElementById("hours").textContent=h;document.getElementById("mins").textContent=m;document.getElementById("secs").textContent=s;document.getElementById("daysMetric").textContent=a}
 
-let remaining=3000,running=false,breakMode=false,timerId=null;
-function timerRender(){document.getElementById("timer").textContent=String(Math.floor(remaining/60)).padStart(2,"0")+":"+String(remaining%60).padStart(2,"0")}
+let remaining=3000,running=false,breakMode=false,timerId=null,endAt=0;
+function timerRender(){
+ const safe=Math.max(0,Math.ceil(remaining));
+ document.getElementById("timer").textContent=String(Math.floor(safe/60)).padStart(2,"0")+":"+String(safe%60).padStart(2,"0");
+}
 function playCompletionChime(type){
  try{
    ensureAudio();
@@ -722,8 +727,57 @@ async function switchMode(){
  }
  timerRender();
 }
-async function tick(){if(remaining>0){remaining--;timerRender()}else{await switchMode()}}
-document.getElementById("start").onclick=()=>{if(!running){running=true;timerId=setInterval(tick,1000)}};document.getElementById("pause").onclick=()=>{running=false;clearInterval(timerId);timerId=null};document.getElementById("reset").onclick=()=>{running=false;clearInterval(timerId);timerId=null;breakMode=false;remaining=3000;document.getElementById("mode").textContent="FOCUS";timerRender()};
+async function tick(){
+ if(!running)return;
+ const left=Math.ceil((endAt-Date.now())/1000);
+ if(left>0){
+   remaining=left;
+   timerRender();
+ }else{
+   remaining=0;
+   timerRender();
+   running=false;
+   clearInterval(timerId);
+   timerId=null;
+   await switchMode();
+ }
+}
+
+document.getElementById("start").onclick=()=>{
+ if(running)return;
+ running=true;
+ endAt=Date.now()+Math.max(0,remaining)*1000;
+ timerRender();
+ clearInterval(timerId);
+ timerId=setInterval(tick,250);
+ tick();
+};
+
+document.getElementById("pause").onclick=()=>{
+ if(!running)return;
+ remaining=Math.max(0,Math.ceil((endAt-Date.now())/1000));
+ running=false;
+ clearInterval(timerId);
+ timerId=null;
+ timerRender();
+};
+
+document.getElementById("reset").onclick=()=>{
+ running=false;
+ clearInterval(timerId);
+ timerId=null;
+ breakMode=false;
+ remaining=3000;
+ endAt=0;
+ document.getElementById("mode").textContent="FOCUS";
+ timerRender();
+};
+
+// If the browser tab is backgrounded, recalculate from the real clock when
+// the user returns instead of losing or gaining minutes because of timer throttling.
+document.addEventListener("visibilitychange",()=>{
+ if(document.visibilityState==="visible" && running)tick();
+});
 
 const QUOTES=["Don't wait to feel motivated. Start the next 50 minutes.","The exam date will not move because you postponed today's work.","Six months of honest sessions can change the direction of your life.","Potential means very little without repeated execution.","Your future self cannot redo today's hours.","Don't chase a perfect study day. Build a reliable one.","One focused session is small. Hundreds of focused sessions are preparation.","The work you avoid today will still be waiting tomorrow.","Your job today is to complete the next session.","Discipline is doing the session even when the excitement is gone."];
 document.getElementById("quote").textContent=QUOTES[Math.floor((Date.now()-new Date(new Date().getFullYear(),0,1))/86400000)%QUOTES.length];
