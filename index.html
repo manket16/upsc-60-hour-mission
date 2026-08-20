@@ -139,34 +139,33 @@ async function ensureWeek(){
  const week=mondayKey();
  const cacheKey=`upsc60_progress_${user.id}_${week}`;
 
- // Read the local checkpoint first. This is what protects a just-completed
- // session if Supabase rejects a write or the connection briefly drops.
  let local=null;
  try{ local=JSON.parse(localStorage.getItem(cacheKey)||"null"); }catch(e){}
 
+ // Only use columns that are known to exist in the weekly_progress table.
  const remote=await db.from("weekly_progress")
-   .select("id,completed,week_start")
+   .select("completed,week_start")
    .eq("user_id",user.id)
    .eq("week_start",week)
-   .order("id",{ascending:false});
+   .maybeSingle();
 
  if(remote.error)throw remote.error;
 
- const rows=remote.data||[];
- const cloudCompleted=rows.length ? Math.min(60,Math.max(0,Number(rows[0].completed)||0)) : null;
+ const cloudCompleted=remote.data
+   ? Math.min(60,Math.max(0,Number(remote.data.completed)||0))
+   : null;
+
  const localCompleted=local && local.weekStart===week
    ? Math.min(60,Math.max(0,Number(local.completed)||0))
    : null;
 
- // If the device has a newer unsynced checkpoint, never overwrite it with
- // an older cloud value.
  const completed=localCompleted!==null
    ? Math.max(localCompleted,cloudCompleted===null?0:cloudCompleted)
    : (cloudCompleted===null?0:cloudCompleted);
 
- if(rows.length){
+ if(remote.data){
    state={
-     ...rows[0],
+     ...remote.data,
      completed,
      weekStart:week,
      week_start:week
@@ -178,7 +177,8 @@ async function ensureWeek(){
        week_start:week,
        completed
      })
-     .select().single();
+     .select("completed,week_start")
+     .single();
 
    if(created.error)throw created.error;
 
@@ -206,35 +206,30 @@ async function saveProgress(){
  state.weekStart=week;
  state.week_start=week;
 
- // Mark this value locally BEFORE contacting Supabase.
  localStorage.setItem(cacheKey,JSON.stringify({
    completed,
    weekStart:week,
    syncedCompleted:null
  }));
 
+ // Update the row using only columns that exist in the table.
  const found=await db.from("weekly_progress")
-   .select("id")
+   .select("completed,week_start")
    .eq("user_id",user.id)
    .eq("week_start",week)
-   .order("id",{ascending:false});
+   .maybeSingle();
 
  if(found.error)throw found.error;
 
  let result;
 
- if(found.data && found.data.length){
-   // Update the newest matching row. Also repair older duplicate rows by
-   // giving them the same completed value, without creating new duplicates.
-   const ids=found.data.map(r=>r.id);
-
+ if(found.data){
    result=await db.from("weekly_progress")
      .update({completed})
-     .in("id",ids)
      .eq("user_id",user.id)
-     .select();
-
-   if(result.error)throw result.error;
+     .eq("week_start",week)
+     .select("completed,week_start")
+     .single();
  }else{
    result=await db.from("weekly_progress")
      .insert({
@@ -242,9 +237,20 @@ async function saveProgress(){
        week_start:week,
        completed
      })
-     .select();
+     .select("completed,week_start")
+     .single();
+ }
 
-   if(result.error)throw result.error;
+ if(result.error)throw result.error;
+
+ if(result.data){
+   state={
+     ...state,
+     ...result.data,
+     completed,
+     weekStart:week,
+     week_start:week
+   };
  }
 
  localStorage.setItem(cacheKey,JSON.stringify({
@@ -252,16 +258,6 @@ async function saveProgress(){
    weekStart:week,
    syncedCompleted:completed
  }));
-
- if(result.data && result.data.length){
-   state={
-     ...state,
-     ...result.data[0],
-     completed,
-     weekStart:week,
-     week_start:week
-   };
- }
 }
 
 async function loadTasks(){
