@@ -26,7 +26,9 @@ input,textarea{width:100%;background:#fffafd;border:1px solid var(--border);bord
 #accountBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
  .sound-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.sound-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;background:#fffafd;border:1px solid var(--border);color:var(--text);border-radius:13px;padding:14px;cursor:pointer;font:inherit}.sound-card strong{font-size:15px}.sound-card span{font-size:12px;color:var(--muted)}.sound-card.active{border:2px solid var(--pink);background:var(--pink-soft)} @media(max-width:720px){main{padding:12px}.hero{min-height:300px}.hero h1{font-size:33px}.grid,.why,.break-grid{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}.sessions{grid-template-columns:repeat(6,1fr)}.timer{font-size:54px}}
 </style>
-<style>.sub-delete{padding:6px 10px;font-size:12px;flex:0 0 auto;white-space:nowrap}</style></head>
+<style>.sub-delete{padding:6px 10px;font-size:12px;flex:0 0 auto;white-space:nowrap}</style><style>
+#breakStatus{min-height:24px;margin-top:10px;font-weight:600}
+</style></head>
 <body class="booting">
 
 <section id="authScreen" class="panel auth">
@@ -137,89 +139,130 @@ async function ensureWeek(){
  const week=mondayKey();
  const cacheKey=`upsc60_progress_${user.id}_${week}`;
 
- const {data,error}=await db.from("weekly_progress")
-   .select("*")
+ // Read the local checkpoint first. This is what protects a just-completed
+ // session if Supabase rejects a write or the connection briefly drops.
+ let local=null;
+ try{ local=JSON.parse(localStorage.getItem(cacheKey)||"null"); }catch(e){}
+
+ const remote=await db.from("weekly_progress")
+   .select("id,completed,week_start")
    .eq("user_id",user.id)
    .eq("week_start",week)
-   .maybeSingle();
+   .order("id",{ascending:false});
 
- if(error)throw error;
+ if(remote.error)throw remote.error;
 
- if(data){
-   // Supabase uses week_start; the UI uses weekStart.
-   // Keep both explicitly so refresh/reset can never send NULL.
-   state={...data,weekStart:data.week_start};
-   localStorage.setItem(cacheKey,JSON.stringify({
-     completed:Number(data.completed)||0,
-     weekStart:week
-   }));
-   return;
+ const rows=remote.data||[];
+ const cloudCompleted=rows.length ? Math.min(60,Math.max(0,Number(rows[0].completed)||0)) : null;
+ const localCompleted=local && local.weekStart===week
+   ? Math.min(60,Math.max(0,Number(local.completed)||0))
+   : null;
+
+ // If the device has a newer unsynced checkpoint, never overwrite it with
+ // an older cloud value.
+ const completed=localCompleted!==null
+   ? Math.max(localCompleted,cloudCompleted===null?0:cloudCompleted)
+   : (cloudCompleted===null?0:cloudCompleted);
+
+ if(rows.length){
+   state={
+     ...rows[0],
+     completed,
+     weekStart:week,
+     week_start:week
+   };
+ }else{
+   const created=await db.from("weekly_progress")
+     .insert({
+       user_id:user.id,
+       week_start:week,
+       completed
+     })
+     .select().single();
+
+   if(created.error)throw created.error;
+
+   state={
+     ...created.data,
+     completed,
+     weekStart:week,
+     week_start:week
+   };
  }
-
- const cached=localStorage.getItem(cacheKey);
- const cachedValue=cached?JSON.parse(cached):null;
- const completed=cachedValue
-   ? Math.min(60,Math.max(0,Number(cachedValue.completed)||0))
-   : 0;
-
- const {data:n,error:e}=await db.from("weekly_progress")
-   .insert({
-     user_id:user.id,
-     week_start:week,
-     completed
-   })
-   .select().single();
-
- if(e)throw e;
-
- state={...n,weekStart:n.week_start||week};
 
  localStorage.setItem(cacheKey,JSON.stringify({
    completed,
-   weekStart:week
+   weekStart:week,
+   syncedCompleted:cloudCompleted
  }));
 }
 
 async function saveProgress(){
  const completed=Math.min(60,Math.max(0,Number(state.completed)||0));
  const week=state.weekStart||state.week_start||mondayKey();
+ const cacheKey=`upsc60_progress_${user.id}_${week}`;
 
  state.completed=completed;
  state.weekStart=week;
  state.week_start=week;
 
- const cacheKey=`upsc60_progress_${user.id}_${week}`;
-
- // Save locally first so a temporary network problem cannot erase the
- // visible progress.
+ // Mark this value locally BEFORE contacting Supabase.
  localStorage.setItem(cacheKey,JSON.stringify({
    completed,
-   weekStart:week
+   weekStart:week,
+   syncedCompleted:null
  }));
 
- // Update by the actual Supabase key fields. We do NOT insert here.
- // This prevents the NULL week_start error and avoids duplicate rows.
- const {data,error}=await db.from("weekly_progress")
-   .update({completed})
+ const found=await db.from("weekly_progress")
+   .select("id")
    .eq("user_id",user.id)
    .eq("week_start",week)
-   .select().maybeSingle();
+   .order("id",{ascending:false});
 
- if(error){
-   console.error("Progress save failed:",error);
-   throw error;
- }
+ if(found.error)throw found.error;
 
- if(data){
-   state={...data,weekStart:data.week_start||week};
+ let result;
+
+ if(found.data && found.data.length){
+   // Update the newest matching row. Also repair older duplicate rows by
+   // giving them the same completed value, without creating new duplicates.
+   const ids=found.data.map(r=>r.id);
+
+   result=await db.from("weekly_progress")
+     .update({completed})
+     .in("id",ids)
+     .eq("user_id",user.id)
+     .select();
+
+   if(result.error)throw result.error;
+ }else{
+   result=await db.from("weekly_progress")
+     .insert({
+       user_id:user.id,
+       week_start:week,
+       completed
+     })
+     .select();
+
+   if(result.error)throw result.error;
  }
 
  localStorage.setItem(cacheKey,JSON.stringify({
-   completed:Number(state.completed)||0,
-   weekStart:state.weekStart
+   completed,
+   weekStart:week,
+   syncedCompleted:completed
  }));
-}
 
+ if(result.data && result.data.length){
+   state={
+     ...state,
+     ...result.data[0],
+     completed,
+     weekStart:week,
+     week_start:week
+   };
+ }
+}
 
 async function loadTasks(){
  const {data,error}=await db.from("tasks").select("*").eq("user_id",user.id).eq("task_date",todayKey()).order("created_at");
@@ -683,44 +726,74 @@ function timerRender(){
  const safe=Math.max(0,Math.ceil(remaining));
  document.getElementById("timer").textContent=String(Math.floor(safe/60)).padStart(2,"0")+":"+String(safe%60).padStart(2,"0");
 }
-function playCompletionChime(type){
+async function playCompletionChime(type){
  try{
    ensureAudio();
-   const now=audioCtx.currentTime;
+   if(audioCtx.state!=="running"){
+     await audioCtx.resume();
+   }
+
+   const now=audioCtx.currentTime+0.03;
    const notes=type==="focus"
-     ? [523.25,659.25,783.99]
-     : [783.99,659.25,523.25];
+     ? [659.25,783.99,1046.50,783.99]
+     : [1046.50,783.99,659.25];
 
    notes.forEach((freq,i)=>{
      const o=audioCtx.createOscillator();
      const g=audioCtx.createGain();
+     const t=now+i*0.24;
+
      o.type="sine";
-     o.frequency.setValueAtTime(freq,now+i*0.22);
-     const t=now+i*0.22;
+     o.frequency.setValueAtTime(freq,t);
      g.gain.setValueAtTime(0.0001,t);
-     g.gain.exponentialRampToValueAtTime(0.18,t+0.025);
-     g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+     g.gain.exponentialRampToValueAtTime(0.28,t+0.025);
+     g.gain.exponentialRampToValueAtTime(0.0001,t+0.20);
+
      o.connect(g).connect(master);
      o.start(t);
-     o.stop(t+0.2);
+     o.stop(t+0.22);
    });
- }catch(e){console.warn("Timer chime unavailable",e);}
+ }catch(e){
+   console.warn("Timer chime unavailable",e);
+ }
 }
 
 async function switchMode(){
  if(!breakMode){
-   // Only a completed 50-minute FOCUS session earns one green hour.
-   playCompletionChime("focus");
+   // A 50-minute focus session earns exactly one hour.
+   await playCompletionChime("focus");
+
    if(state.completed<60){
      state.completed++;
-     try{await saveProgress();render()}catch(e){alert("Progress could not be saved to the cloud: "+e.message)}
+     try{
+       await saveProgress();
+       render();
+       const status=document.getElementById("breakStatus");
+       if(status)status.textContent="🔔 Focus complete — 1 hour added. Take your 10-minute break.";
+     }catch(e){
+       // Never throw away the completed hour if cloud saving fails.
+       localStorage.setItem(
+         `upsc60_progress_${user.id}_${state.weekStart||mondayKey()}`,
+         JSON.stringify({
+           completed:Number(state.completed)||0,
+           weekStart:state.weekStart||state.week_start||mondayKey()
+         })
+       );
+       render();
+       const status=document.getElementById("breakStatus");
+       if(status)status.textContent="⚠️ 1 hour recorded on this device. Cloud sync will retry later.";
+       console.warn("Cloud sync failed; local progress retained:",e);
+     }
    }
+
    breakMode=true;
    remaining=600;
    document.getElementById("mode").textContent="BREAK";
  }else{
-   // The 10-minute BREAK never adds an hour or changes the green boxes.
-   playCompletionChime("break");
+   await playCompletionChime("break");
+   const status=document.getElementById("breakStatus");
+   if(status)status.textContent="🔔 Break finished — time to focus again.";
+
    breakMode=false;
    remaining=3000;
    document.getElementById("mode").textContent="FOCUS";
@@ -745,6 +818,7 @@ async function tick(){
 
 document.getElementById("start").onclick=()=>{
  if(running)return;
+ ensureAudio();
  running=true;
  endAt=Date.now()+Math.max(0,remaining)*1000;
  timerRender();
@@ -791,10 +865,10 @@ function ensureAudio(){
  if(!audioCtx){
    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
    master=audioCtx.createGain();
-   master.gain.value=0.05;
+   master.gain.value=0.10;
    master.connect(audioCtx.destination);
  }
- if(audioCtx.state!=="running") audioCtx.resume();
+ if(audioCtx.state!=="running") audioCtx.resume().catch(()=>{});
 }
 
 function stopSound(){
